@@ -1,0 +1,19 @@
+[project]
+name = "study-bot"
+version = "0.1.0"
+description = "Telegram бот Учёт и контроль — эксперт по строительству"
+requires-python = ">=3.11"
+dependencies = [
+    "aiogram>=3.27",
+    "aiohttp-socks>=0.11.0",
+    "python-dotenv>=1.1",
+    "requests>=2.32",
+]
+
+[project.scripts]
+bot = "bot.__main__:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.7",
+]
