@@ -220,7 +220,7 @@ async def handle_ask(message: types.Message) -> None:
 
     wait_msg = await message.answer("⏳ Думаю...")
     try:
-        answer = await ask(args)
+        answer = await ask(text)
         await _send_result(message, answer, wait_msg, as_docx=False)
     except Exception:
         logger.exception("Error processing /ask")
