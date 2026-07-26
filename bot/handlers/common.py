@@ -4,7 +4,7 @@ import logging
 from base64 import b64encode
 
 from aiogram import Router, types
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command
 
 from bot.services.docx_writer import create_answer_docx
 from bot.services.file_reader import (
@@ -55,10 +55,9 @@ async def handle_help(message: types.Message) -> None:
         "• /word (вопрос) — ответ в .docx\n"
         "• Пришли фото задания — прочитаю и решу\n"
         "• Пришли PDF или Word — извлеку текст и отвечу в .docx\n\n"
-        "👥 <b>В группе (с другими ботами):</b>\n"
-        "• /ask@bot_username (вопрос) — ответ текстом\n"
-        "• /word@bot_username (вопрос) — ответ .docx\n"
-        "• Или ответь на сообщение любой из этих команд\n"
+        "👥 <b>В группе:</b>\n"
+        "• Ответь на сообщение командой /ask или /word\n"
+        "• Бот обработает файл, фото или текст, на который ты ответил\n"
         "• Без команды бот в группе молчит\n\n"
         "📌 <b>Пример тем:</b> сметное дело, КС-2, КС-3, технадзор, "
         "исполнительная документация, журналы работ, СНиП, СП, "
@@ -177,13 +176,13 @@ async def _send_result(
 
 
 @router.message(Command("word"))
-async def handle_word(message: types.Message, command: CommandObject) -> None:
+async def handle_word(message: types.Message) -> None:
     if message.reply_to_message:
         await process_replied(message, as_docx=True)
         return
 
-    args = command.args
-    if not args:
+    text = message.text.removeprefix("/word").strip()
+    if not text:
         await message.answer(
             "❌ Напиши вопрос или ответь на сообщение с файлом/фото\n\n"
             "Пример: `/word перечисли СНиПы`"
@@ -192,7 +191,7 @@ async def handle_word(message: types.Message, command: CommandObject) -> None:
 
     wait_msg = await message.answer("⏳ Думаю...")
     try:
-        answer = await ask(args)
+        answer = await ask(text)
         docx_bytes = create_answer_docx(answer)
         await message.answer_document(
             types.BufferedInputFile(docx_bytes.read(), filename="answer.docx"),
@@ -205,13 +204,13 @@ async def handle_word(message: types.Message, command: CommandObject) -> None:
 
 
 @router.message(Command("ask"))
-async def handle_ask(message: types.Message, command: CommandObject) -> None:
+async def handle_ask(message: types.Message) -> None:
     if message.reply_to_message:
         await process_replied(message, as_docx=False)
         return
 
-    args = command.args
-    if not args:
+    text = message.text.removeprefix("/ask").strip()
+    if not text:
         await message.answer(
             "❌ Напиши вопрос или ответь на сообщение\n\n"
             "Пример: `/ask что такое КС-2?`"
@@ -220,7 +219,7 @@ async def handle_ask(message: types.Message, command: CommandObject) -> None:
 
     wait_msg = await message.answer("⏳ Думаю...")
     try:
-        answer = await ask(args)
+        answer = await ask(text)
         await wait_msg.edit_text(answer)
     except Exception:
         logger.exception("Error processing /ask")
