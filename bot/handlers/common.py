@@ -7,7 +7,12 @@ from aiogram import Router, types
 from aiogram.filters import Command
 
 from bot.services.docx_writer import create_answer_docx
-from bot.services.file_reader import chunk_text, extract_text
+from bot.services.file_reader import (
+    chunk_text,
+    extract_text,
+    is_scanned_pdf,
+    pdf_pages_as_base64,
+)
 from bot.services.openrouter import ask
 
 logger = logging.getLogger(__name__)
@@ -77,21 +82,33 @@ async def handle_document(message: types.Message) -> None:
         raw = await message.bot.download_file(file.file_path)
         file_bytes = raw.read()
 
-        text = extract_text(file_bytes, ext)
-        chunks = chunk_text(text)[:MAX_CHUNKS]
-
         caption = message.caption or ""
-        results = []
 
-        for i, chunk in enumerate(chunks, 1):
-            await wait_msg.edit_text(f"⏳ Обрабатываю часть {i}/{len(chunks)}...")
-            prompt = f"{caption}\n\n{chunk}" if caption else chunk
-            answer = await ask(prompt)
-            results.append(f"=== Часть {i} ===\n\n{answer}")
+        if ext == "pdf" and is_scanned_pdf(file_bytes):
+            pages = pdf_pages_as_base64(file_bytes)
+            results = []
 
-        full = "\n\n".join(results)
+            for i, b64 in enumerate(pages, 1):
+                await wait_msg.edit_text(f"⏳ Распознаю страницу {i}/{len(pages)}...")
+                prompt = caption or "Прочитай и перепиши весь текст с этого изображения"
+                answer = await ask(prompt, image_base64=b64)
+                results.append(f"=== Страница {i} ===\n\n{answer}")
+
+            full = "\n\n".join(results)
+        else:
+            text = extract_text(file_bytes, ext)
+            chunks = chunk_text(text)[:MAX_CHUNKS]
+            results = []
+
+            for i, chunk in enumerate(chunks, 1):
+                await wait_msg.edit_text(f"⏳ Обрабатываю часть {i}/{len(chunks)}...")
+                prompt = f"{caption}\n\n{chunk}" if caption else chunk
+                answer = await ask(prompt)
+                results.append(f"=== Часть {i} ===\n\n{answer}")
+
+            full = "\n\n".join(results)
+
         docx_bytes = create_answer_docx(full)
-
         await message.answer_document(
             types.BufferedInputFile(docx_bytes.read(), filename="answer.docx"),
             caption="✅ Готово!",

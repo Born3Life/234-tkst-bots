@@ -3,13 +3,17 @@ from __future__ import annotations
 import io
 import logging
 import re
+from base64 import b64encode
 
 import pdfplumber
+import pypdfium2 as pdfium
 from docx import Document as DocxDocument
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 4000
+SCAN_THRESHOLD = 100
 
 
 def extract_text(file_bytes: bytes, ext: str) -> str:
@@ -19,6 +23,29 @@ def extract_text(file_bytes: bytes, ext: str) -> str:
     if ext in ("docx",):
         return _extract_docx(file_bytes)
     raise ValueError(f"Unsupported format: {ext}")
+
+
+def is_scanned_pdf(file_bytes: bytes) -> bool:
+    text = _extract_pdf(file_bytes)
+    clean = re.sub(r"--- Страница \d+ ---\s*", "", text).strip()
+    return len(clean) < SCAN_THRESHOLD
+
+
+def pdf_pages_as_base64(file_bytes: bytes, max_pages: int = 10) -> list[str]:
+    pdf = pdfium.PdfDocument(io.BytesIO(file_bytes))
+    total = min(len(pdf), max_pages)
+    images: list[str] = []
+
+    for i in range(total):
+        page = pdf[i]
+        bitmap = page.render(scale=2)
+        pil = Image.frombytes("RGB", (bitmap.width, bitmap.height), bitmap.format("bgr"))
+        buf = io.BytesIO()
+        pil.save(buf, format="JPEG", quality=85)
+        images.append(b64encode(buf.getvalue()).decode())
+
+    pdf.close()
+    return images
 
 
 def _extract_pdf(file_bytes: bytes) -> str:
