@@ -307,8 +307,12 @@ async def handle_ask(message: types.Message) -> None:
         await wait_msg.edit_text("❌ Ошибка. Попробуй ещё раз.")
 
 
-@router.message(lambda msg: msg.document is not None and not is_group(msg))
+@router.message(lambda msg: msg.document is not None)
 async def handle_document(message: types.Message) -> None:
+    if is_group(message):
+        mode = CHAT_MODES.get(message.chat.id)
+        if mode != BOT_SPECIALTY:
+            return
     await _process_document(message, message.document, message.caption or "", as_docx=True)
 
 
