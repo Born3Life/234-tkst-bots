@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_DOCS = {"pdf", "docx"}
 MAX_CHUNKS = 5
+MAX_TEXT_LEN = 4000
 
 
 def is_group(message: types.Message) -> bool:
@@ -164,7 +165,7 @@ async def _send_result(
     wait_msg: types.Message,
     as_docx: bool,
 ) -> None:
-    if as_docx:
+    if as_docx or len(text) > MAX_TEXT_LEN:
         docx_bytes = create_answer_docx(text)
         await message.answer_document(
             types.BufferedInputFile(docx_bytes.read(), filename="answer.docx"),
@@ -219,8 +220,8 @@ async def handle_ask(message: types.Message) -> None:
 
     wait_msg = await message.answer("⏳ Думаю...")
     try:
-        answer = await ask(text)
-        await wait_msg.edit_text(answer)
+        answer = await ask(args)
+        await _send_result(message, answer, wait_msg, as_docx=False)
     except Exception:
         logger.exception("Error processing /ask")
         await wait_msg.edit_text("❌ Ошибка. Попробуй ещё раз.")
@@ -249,15 +250,7 @@ async def handle_message(message: types.Message) -> None:
         wait_msg = await message.answer("⏳ Думаю...")
         try:
             answer = await ask(text)
-            if want_docx:
-                docx_bytes = create_answer_docx(answer)
-                await message.answer_document(
-                    types.BufferedInputFile(docx_bytes.read(), filename="answer.docx"),
-                    caption="✅ Готово!",
-                )
-                await wait_msg.delete()
-            else:
-                await wait_msg.edit_text(answer)
+            await _send_result(message, answer, wait_msg, as_docx=want_docx)
         except Exception:
             logger.exception("Error processing text")
             await wait_msg.edit_text("❌ Ошибка. Попробуй ещё раз.")
@@ -273,7 +266,7 @@ async def handle_message(message: types.Message) -> None:
             b64 = b64encode(file_bytes.read()).decode()
 
             answer = await ask(caption, image_base64=b64)
-            await wait_msg.edit_text(answer)
+            await _send_result(message, answer, wait_msg, as_docx=False)
         except Exception:
             logger.exception("Error processing photo")
             await wait_msg.edit_text("❌ Ошибка при обработке фото. Попробуй ещё раз.")
