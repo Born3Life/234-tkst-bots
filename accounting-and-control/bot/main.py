@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 from os import getenv
 from pathlib import Path
 
-from aiohttp import web
+from aiohttp import ClientSession, web
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -16,6 +17,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 BOT_TOKEN: str | None = getenv("BOT_TOKEN")
 TELEGRAM_PROXY: str | None = getenv("TELEGRAM_PROXY")
 PORT = int(getenv("PORT", "8080"))
+RENDER_URL: str | None = getenv("RENDER_EXTERNAL_URL")
 
 
 async def health(_request: web.Request) -> web.Response:
@@ -31,6 +33,22 @@ async def _start_health() -> web.AppRunner:
     await site.start()
     logger.info("health endpoint on 0.0.0.0:%d", PORT)
     return runner
+
+
+async def _keep_alive() -> None:
+    if not RENDER_URL:
+        return
+    logger.info("keep-alive enabled: %s (ping every 10 min)", RENDER_URL)
+    try:
+        while True:
+            await asyncio.sleep(600)
+            try:
+                async with ClientSession() as s:
+                    await s.get(RENDER_URL, timeout=10)
+            except Exception:
+                pass
+    except asyncio.CancelledError:
+        pass
 
 
 async def main() -> None:
@@ -59,10 +77,13 @@ async def main() -> None:
     for router in routers:
         dp.include_router(router)
 
+    keep_alive_task = asyncio.create_task(_keep_alive())
+
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("study-bot started")
     try:
         await dp.start_polling(bot)
     finally:
+        keep_alive_task.cancel()
         await bot.session.close()
         await health_runner.cleanup()
