@@ -311,7 +311,7 @@ async def handle_ask(message: types.Message) -> None:
 async def handle_document(message: types.Message) -> None:
     if is_group(message):
         mode = CHAT_MODES.get(message.chat.id)
-        if mode != BOT_SPECIALTY:
+        if mode is not None and mode != BOT_SPECIALTY:
             return
     await _process_document(message, message.document, message.caption or "", as_docx=True)
 
@@ -320,9 +320,7 @@ async def handle_document(message: types.Message) -> None:
 async def handle_message(message: types.Message) -> None:
     if is_group(message):
         mode = CHAT_MODES.get(message.chat.id)
-        if mode and mode == BOT_SPECIALTY:
-            pass
-        else:
+        if mode is not None and mode != BOT_SPECIALTY:
             return
 
     if message.text:
