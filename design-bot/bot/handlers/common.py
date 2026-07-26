@@ -128,14 +128,13 @@ async def handle_ping(message: types.Message) -> None:
 
 @router.message(Command("menu"))
 async def handle_menu(message: types.Message) -> None:
+    info = SPECIALTY_INFO[BOT_SPECIALTY]
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text=info["name"], callback_data=f"info_{k}")]
-        for k, info in SPECIALTY_INFO.items()
+        [types.InlineKeyboardButton(text=info["name"], callback_data=f"info_{BOT_SPECIALTY}")],
     ])
     await message.answer(
-        "🎯 <b>Боты-помощники</b>\n\n"
-        "Нажми на кнопку — я покажу как вызвать нужного бота\n"
-        "Или просто напиши @bot_username + вопрос",
+        f"🎯 <b>{info['name']}</b>\n{info['desc']}\n\n"
+        f"Нажми кнопку или напиши {info['username']} + вопрос",
         reply_markup=kb,
     )
 
