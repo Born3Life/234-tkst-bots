@@ -206,7 +206,7 @@ async def _process_document(
     wait_msg = await message.answer("⏳ Читаю файл...")
     try:
         file = await message.bot.get_file(doc.file_id)
-        raw = await message.bot.download_file(file.file_path)
+        raw = await asyncio.wait_for(message.bot.download_file(file.file_path), timeout=180)
         file_bytes = raw.read()
 
         if ext == "pdf" and is_scanned_pdf(file_bytes):

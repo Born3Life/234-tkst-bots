@@ -173,7 +173,7 @@ async def process_replied(message: types.Message, as_docx: bool = False) -> None
         try:
             photo = target.photo[-1]
             file = await message.bot.get_file(photo.file_id)
-            raw = await message.bot.download_file(file.file_path)
+            raw = await asyncio.wait_for(message.bot.download_file(file.file_path), timeout=180)
             b64 = b64encode(raw.read()).decode()
             caption = target.caption or "Что изображено на этом фото? Ответь подробно."
             answer = await ask(caption, image_base64=b64)
@@ -204,7 +204,7 @@ async def _process_document(
     wait_msg = await message.answer("⏳ Читаю файл...")
     try:
         file = await message.bot.get_file(doc.file_id)
-        raw = await message.bot.download_file(file.file_path)
+        raw = await asyncio.wait_for(message.bot.download_file(file.file_path), timeout=180)
         file_bytes = raw.read()
 
         if ext == "pdf" and is_scanned_pdf(file_bytes):
@@ -348,7 +348,7 @@ async def handle_message(message: types.Message) -> None:
         wait_msg = await message.answer("⏳ Анализирую изображение...")
         try:
             file = await message.bot.get_file(photo.file_id)
-            file_bytes = await message.bot.download_file(file.file_path)
+            file_bytes = await asyncio.wait_for(message.bot.download_file(file.file_path), timeout=180)
             b64 = b64encode(file_bytes.read()).decode()
 
             answer = await ask(caption, image_base64=b64)
