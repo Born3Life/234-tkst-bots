@@ -4,7 +4,7 @@ import asyncio
 import logging
 from base64 import b64encode
 
-from aiogram import Router, types
+from aiogram import F, Router, types
 from aiogram.filters import Command
 
 from bot.services.docx_writer import create_answer_docx
@@ -61,6 +61,7 @@ async def handle_help(message: types.Message) -> None:
         "• Пришли фото сметы/КС-2 — проанализирую\n"
         "• Пришли PDF со сметой — проверю\n\n"
         "👥 <b>В группе:</b>\n"
+        "• /menu — список всех ботов\n"
         "• /ask@bot_username (вопрос) — ответ текстом\n"
         "• /word@bot_username (вопрос) — ответ .docx\n"
         "• Без команды бот молчит\n\n"
@@ -81,6 +82,52 @@ async def handle_about(message: types.Message) -> None:
         "Разработчик: @born3life"
     )
     await message.answer(text)
+
+
+@router.message(Command("menu"))
+async def handle_menu(message: types.Message) -> None:
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="📐 Учёт и контроль", callback_data="menu_accounting")],
+        [types.InlineKeyboardButton(text="🏗 Проектирование зданий", callback_data="menu_design")],
+        [types.InlineKeyboardButton(text="📊 Сметное дело", callback_data="menu_estimate")],
+    ])
+    await message.answer("🎯 <b>Выбери направление:</b>", reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("menu_"))
+async def handle_menu_callback(callback: types.CallbackQuery) -> None:
+    texts = {
+        "menu_accounting": (
+            "📐 <b>Учёт и контроль</b>\n"
+            "Сметы, КС-2/КС-3, технадзор, исполнительная документация, СНиП\n\n"
+            "Вызови: @GroupTKST_bot\n"
+            "Команды:\n"
+            "/ask@GroupTKST_bot (вопрос)\n"
+            "/word@GroupTKST_bot (вопрос)\n"
+            "Или ответь на сообщение командами выше"
+        ),
+        "menu_design": (
+            "🏗 <b>Проектирование зданий</b>\n"
+            "AutoCAD, чертежи, АР/КР, пояснительные записки, ГОСТ, СП\n\n"
+            "Вызови: @design_bot_username\n"
+            "Команды:\n"
+            "/ask@design_bot_username (вопрос)\n"
+            "/word@design_bot_username (вопрос)\n"
+            "Или ответь на сообщение командой"
+        ),
+        "menu_estimate": (
+            "📊 <b>Сметное дело</b>\n"
+            "ФЕР, ТЕР, ГЭСН, индексы, ЛСР, ОСР, ССРСС, проверка смет\n\n"
+            "Вызови: @estimate_bot_username\n"
+            "Команды:\n"
+            "/ask@estimate_bot_username (вопрос)\n"
+            "/word@estimate_bot_username (вопрос)\n"
+            "Или ответь на сообщение командой"
+        ),
+    }
+    t = texts.get(callback.data, "❌ Неизвестное направление")
+    await callback.message.edit_text(t, reply_markup=None)
+    await callback.answer()
 
 
 async def process_replied(message: types.Message, as_docx: bool = False) -> None:
