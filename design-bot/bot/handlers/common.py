@@ -19,7 +19,7 @@ from bot.services.openrouter import ask
 logger = logging.getLogger(__name__)
 
 SUPPORTED_DOCS = {"pdf", "docx"}
-MAX_CHUNKS = 5
+MAX_CHUNKS = 15
 MAX_PAGES = 30
 MAX_TEXT_LEN = 4000
 

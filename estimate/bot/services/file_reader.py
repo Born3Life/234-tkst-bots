@@ -59,11 +59,18 @@ def _extract_pdf(file_bytes: bytes) -> str:
 
 def _extract_docx(file_bytes: bytes) -> str:
     doc = DocxDocument(io.BytesIO(file_bytes))
-    paragraphs = []
+    parts: list[str] = []
     for para in doc.paragraphs:
         if para.text.strip():
-            paragraphs.append(para.text.strip())
-    return "\n".join(paragraphs)
+            parts.append(para.text.strip())
+    for i, table in enumerate(doc.tables, 1):
+        parts.append(f"\n--- Таблица {i} ---")
+        rows = []
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            rows.append(" | ".join(cells))
+        parts.append("\n".join(rows))
+    return "\n".join(parts)
 
 
 def chunk_text(text: str, size: int = CHUNK_SIZE) -> list[str]:
