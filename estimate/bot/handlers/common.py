@@ -30,6 +30,28 @@ def is_group(message: types.Message) -> bool:
 
 router = Router()
 
+BOT_SPECIALTY = "estimate"
+BOT_NAME = "📊 Сметное дело"
+CHAT_MODES: dict[int, str] = {}
+
+SPECIALTY_INFO = {
+    "accounting": {
+        "name": "📐 Учёт и контроль",
+        "desc": "Сметы, КС-2/КС-3, технадзор, документация, СНиП",
+        "username": "@GroupTKST_bot",
+    },
+    "design": {
+        "name": "🏗 Проектирование зданий",
+        "desc": "AutoCAD, чертежи, АР/КР, записки, ГОСТ",
+        "username": "@Group234TKST_bot",
+    },
+    "estimate": {
+        "name": "📊 Сметное дело",
+        "desc": "ФЕР, ТЕР, ГЭСН, индексы, ЛСР, КС-2, Гранд-Смета",
+        "username": "@estimateTKST_bot",
+    },
+}
+
 
 @router.message(Command("start"))
 async def handle_start(message: types.Message) -> None:
@@ -61,10 +83,11 @@ async def handle_help(message: types.Message) -> None:
         "• Пришли фото сметы/КС-2 — проанализирую\n"
         "• Пришли PDF со сметой — проверю\n\n"
         "👥 <b>В группе:</b>\n"
-        "• /menu — список всех ботов\n"
-        "• /ask@bot_username (вопрос) — ответ текстом\n"
-        "• /word@bot_username (вопрос) — ответ .docx\n"
-        "• Без команды бот молчит\n\n"
+        "• /menu — кнопки со всеми направлениями\n"
+        "• Нажми кнопку → напиши вопрос → я отвечу\n"
+        "• Пришли файл/фото — обработаю\n"
+        "• /word (вопрос) — ответ в формате .docx\n"
+        "• /ask@bot (вопрос) — вызвать конкретного бота\n\n"
         "📌 <b>Примеры:</b> проверка сметы, подбор расценки, "
         "расчёт НР и СП, индексы пересчёта, КС-2, Гранд-Смета"
     )
@@ -87,46 +110,34 @@ async def handle_about(message: types.Message) -> None:
 @router.message(Command("menu"))
 async def handle_menu(message: types.Message) -> None:
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="📐 Учёт и контроль", callback_data="menu_accounting")],
-        [types.InlineKeyboardButton(text="🏗 Проектирование зданий", callback_data="menu_design")],
-        [types.InlineKeyboardButton(text="📊 Сметное дело", callback_data="menu_estimate")],
+        [types.InlineKeyboardButton(text=v["name"], callback_data=f"mode_{k}")]
+        for k, v in SPECIALTY_INFO.items()
     ])
     await message.answer("🎯 <b>Выбери направление:</b>", reply_markup=kb)
 
 
-@router.callback_query(F.data.startswith("menu_"))
-async def handle_menu_callback(callback: types.CallbackQuery) -> None:
-    texts = {
-        "menu_accounting": (
-            "📐 <b>Учёт и контроль</b>\n"
-            "Сметы, КС-2/КС-3, технадзор, исполнительная документация, СНиП\n\n"
-            "Вызови: @GroupTKST_bot\n"
-            "Команды:\n"
-            "/ask@GroupTKST_bot (вопрос)\n"
-            "/word@GroupTKST_bot (вопрос)\n"
-            "Или ответь на сообщение командами выше"
-        ),
-        "menu_design": (
-            "🏗 <b>Проектирование зданий</b>\n"
-            "AutoCAD, чертежи, АР/КР, пояснительные записки, ГОСТ, СП\n\n"
-            "Вызови: @Group234TKST_bot\n"
-            "Команды:\n"
-            "/ask@Group234TKST_bot (вопрос)\n"
-            "/word@Group234TKST_bot (вопрос)\n"
-            "Или ответь на сообщение командой"
-        ),
-        "menu_estimate": (
-            "📊 <b>Сметное дело</b>\n"
-            "ФЕР, ТЕР, ГЭСН, индексы, ЛСР, ОСР, ССРСС, проверка смет\n\n"
-            "Вызови: @estimateTKST_bot\n"
-            "Команды:\n"
-            "/ask@estimateTKST_bot (вопрос)\n"
-            "/word@estimateTKST_bot (вопрос)\n"
-            "Или ответь на сообщение командой"
-        ),
-    }
-    t = texts.get(callback.data, "❌ Неизвестное направление")
-    await callback.message.edit_text(t, reply_markup=None)
+@router.callback_query(F.data.startswith("mode_"))
+async def handle_mode_callback(callback: types.CallbackQuery) -> None:
+    mode = callback.data.replace("mode_", "")
+    info = SPECIALTY_INFO.get(mode)
+    if not info:
+        await callback.answer("❌ Неизвестное направление")
+        return
+
+    CHAT_MODES[callback.message.chat.id] = mode
+
+    if mode == BOT_SPECIALTY:
+        await callback.message.edit_text(
+            f"✅ <b>{info['name']}</b>\n{info['desc']}\n\n✍️ Напиши вопрос — я отвечу",
+            reply_markup=None,
+        )
+    else:
+        await callback.message.edit_text(
+            f"✅ <b>{info['name']}</b>\n{info['desc']}\n\n"
+            f"Этот бот ({BOT_NAME}) не отвечает за эту тему.\n"
+            f"Напиши {info['username']} вопрос",
+            reply_markup=None,
+        )
     await callback.answer()
 
 
@@ -296,7 +307,11 @@ async def handle_document(message: types.Message) -> None:
 @router.message()
 async def handle_message(message: types.Message) -> None:
     if is_group(message):
-        return
+        mode = CHAT_MODES.get(message.chat.id)
+        if mode and mode == BOT_SPECIALTY:
+            pass
+        else:
+            return
 
     if message.text:
         text = message.text
