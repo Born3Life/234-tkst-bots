@@ -110,19 +110,19 @@ async def handle_menu_callback(callback: types.CallbackQuery) -> None:
         "menu_design": (
             "🏗 <b>Проектирование зданий</b>\n"
             "AutoCAD, чертежи, АР/КР, пояснительные записки, ГОСТ, СП\n\n"
-            "Вызови: @design_bot_username\n"
+            "Вызови: @Group234TKST_bot\n"
             "Команды:\n"
-            "/ask@design_bot_username (вопрос)\n"
-            "/word@design_bot_username (вопрос)\n"
+            "/ask@Group234TKST_bot (вопрос)\n"
+            "/word@Group234TKST_bot (вопрос)\n"
             "Или ответь на сообщение командой"
         ),
         "menu_estimate": (
             "📊 <b>Сметное дело</b>\n"
             "ФЕР, ТЕР, ГЭСН, индексы, ЛСР, ОСР, ССРСС, проверка смет\n\n"
-            "Вызови: @estimate_bot_username\n"
+            "Вызови: @estimateTKST_bot\n"
             "Команды:\n"
-            "/ask@estimate_bot_username (вопрос)\n"
-            "/word@estimate_bot_username (вопрос)\n"
+            "/ask@estimateTKST_bot (вопрос)\n"
+            "/word@estimateTKST_bot (вопрос)\n"
             "Или ответь на сообщение командой"
         ),
     }
