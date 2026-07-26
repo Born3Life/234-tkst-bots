@@ -1,0 +1,16 @@
+[project]
+name = "design-bot"
+version = "0.1.0"
+description = "Telegram бот Проектирование зданий — эксперт по архитектуре, конструкциям, AutoCAD"
+requires-python = ">=3.11"
+dependencies = [
+    "aiogram>=3.27",
+    "aiohttp>=3.11",
+    "aiohttp-socks>=0.11.0",
+    "pdfplumber>=0.11",
+    "python-docx>=1.1",
+    "python-dotenv>=1.1",
+]
+
+[project.scripts]
+bot = "bot.__main__:main"
