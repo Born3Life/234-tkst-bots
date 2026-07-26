@@ -28,6 +28,11 @@ def is_group(message: types.Message) -> bool:
     return message.chat.type in ("group", "supergroup")
 
 
+def strip_cmd(text: str) -> str:
+    parts = text.split(maxsplit=1)
+    return parts[1].strip() if len(parts) > 1 else ""
+
+
 router = Router()
 
 BOT_SPECIALTY = "estimate"
@@ -109,11 +114,14 @@ async def handle_about(message: types.Message) -> None:
 
 @router.message(Command("menu"))
 async def handle_menu(message: types.Message) -> None:
+    info = SPECIALTY_INFO[BOT_SPECIALTY]
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text=v["name"], callback_data=f"mode_{k}")]
-        for k, v in SPECIALTY_INFO.items()
+        [types.InlineKeyboardButton(text=info["name"], callback_data=f"mode_{BOT_SPECIALTY}")],
     ])
-    await message.answer("🎯 <b>Выбери направление:</b>", reply_markup=kb)
+    await message.answer(
+        f"🎯 <b>{info['name']}</b>\n{info['desc']}\n\nНажми кнопку, чтобы задать вопрос",
+        reply_markup=kb,
+    )
 
 
 @router.callback_query(F.data.startswith("mode_"))
@@ -254,7 +262,7 @@ async def handle_word(message: types.Message) -> None:
         await process_replied(message, as_docx=True)
         return
 
-    text = message.text.removeprefix("/word").strip()
+    text = strip_cmd(message.text)
     if not text:
         await message.answer(
             "❌ Напиши вопрос или ответь на сообщение с файлом/фото\n\n"
@@ -282,7 +290,7 @@ async def handle_ask(message: types.Message) -> None:
         await process_replied(message, as_docx=False)
         return
 
-    text = message.text.removeprefix("/ask").strip()
+    text = strip_cmd(message.text)
     if not text:
         await message.answer(
             "❌ Напиши вопрос или ответь на сообщение\n\n"
