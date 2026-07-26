@@ -68,7 +68,7 @@ async def handle_message(message: types.Message) -> None:
 
         wait_msg = await message.answer("⏳ Думаю...")
         try:
-            answer = ask(text)
+            answer = await ask(text)
             await wait_msg.edit_text(answer)
         except Exception:
             logger.exception("Error processing text")
@@ -84,7 +84,7 @@ async def handle_message(message: types.Message) -> None:
             file_bytes = await message.bot.download_file(file.file_path)
             b64 = b64encode(file_bytes.read()).decode()
 
-            answer = ask(caption, image_base64=b64)
+            answer = await ask(caption, image_base64=b64)
             await wait_msg.edit_text(answer)
         except Exception:
             logger.exception("Error processing photo")

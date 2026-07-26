@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from os import getenv
 
-from requests import Session
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ SYSTEM_PROMPT = (
 )
 
 
-def ask(prompt: str, image_base64: str | None = None) -> str:
+async def ask(prompt: str, image_base64: str | None = None) -> str:
     key = getenv("OPENROUTER_API_KEY")
     if not key:
         return "❌ OPENROUTER_API_KEY не настроен в .env"
@@ -51,17 +51,15 @@ def ask(prompt: str, image_base64: str | None = None) -> str:
         "temperature": 0.3,
     }
 
-    session = Session()
-    session.headers.update(
-        {
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        }
-    )
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
 
     try:
-        resp = session.post(API_URL, json=payload, timeout=120)
-        data = resp.json()
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.post(API_URL, json=payload, timeout=aiohttp.ClientTimeout(total=120)) as resp:
+                data = await resp.json()
 
         if "error" in data:
             err = data["error"]
@@ -73,5 +71,3 @@ def ask(prompt: str, image_base64: str | None = None) -> str:
     except Exception:
         logger.exception("OpenRouter request failed")
         return "❌ Ошибка при запросе. Попробуй позже."
-    finally:
-        session.close()

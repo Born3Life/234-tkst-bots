@@ -2,4 +2,7 @@
 .venv/
 __pycache__/
 *.pyc
-uv.lock
+
+*.docx
+*.tmp
+start_bot.bat
