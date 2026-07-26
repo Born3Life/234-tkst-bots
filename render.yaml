@@ -1,5 +1,5 @@
 services:
-  - type: worker
+  - type: web
     name: study-bot
     runtime: docker
     plan: free
