@@ -52,7 +52,12 @@ async def main() -> None:
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
+    logger.info("health endpoint on 0.0.0.0:%d", PORT)
 
     await bot.delete_webhook(drop_pending_updates=True)
-    logger.info("study-bot started on port %d", PORT)
-    await dp.start_polling(bot)
+    logger.info("study-bot started")
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
+        await runner.cleanup()
