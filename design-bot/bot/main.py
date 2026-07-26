@@ -5,7 +5,7 @@ import sys
 from os import getenv
 from pathlib import Path
 
-from aiohttp import ClientTimeout, web
+from aiohttp import web
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -47,8 +47,7 @@ async def main() -> None:
 
     from bot.handlers import routers
 
-    timeout = ClientTimeout(total=600, sock_read=120)
-    session = AiohttpSession(proxy=TELEGRAM_PROXY, timeout=timeout) if TELEGRAM_PROXY else AiohttpSession(timeout=timeout)
+    session = AiohttpSession(proxy=TELEGRAM_PROXY, timeout=600) if TELEGRAM_PROXY else AiohttpSession(timeout=600)
 
     bot = Bot(
         token=BOT_TOKEN,

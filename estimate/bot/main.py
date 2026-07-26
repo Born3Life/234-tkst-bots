@@ -47,7 +47,7 @@ async def main() -> None:
 
     from bot.handlers import routers
 
-    session = AiohttpSession(proxy=TELEGRAM_PROXY) if TELEGRAM_PROXY else None
+    session = AiohttpSession(proxy=TELEGRAM_PROXY, timeout=600) if TELEGRAM_PROXY else AiohttpSession(timeout=600)
 
     bot = Bot(
         token=BOT_TOKEN,
