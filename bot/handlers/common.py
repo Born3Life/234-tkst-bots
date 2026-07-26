@@ -35,7 +35,8 @@ async def handle_start(message: types.Message) -> None:
         "• Решаю тесты, разбираю задачи\n"
         "• Читаю PDF и Word файлы, делаю выжимку в .docx\n"
         "• Объясняю нормативные документы\n\n"
-        "📎 <b>Пришли фото, PDF, Word или просто напиши вопрос</b>"
+        "📎 <b>Пришли фото, PDF, Word или напиши вопрос</b>\n"
+        "💾 <b>/word (текст)</b> — ответ в формате .docx"
     )
     await message.answer(text)
 
@@ -45,6 +46,7 @@ async def handle_help(message: types.Message) -> None:
     text = (
         "💡 <b>Как пользоваться:</b>\n\n"
         "• Напиши вопрос текстом — я отвечу\n"
+        "• Используй /word (вопрос) — ответ сразу в .docx\n"
         "• Пришли фото задания — прочитаю и решу\n"
         "• Пришли PDF или Word — извлеку текст и отвечу в .docx\n"
         "• Пришли фото теста — перепишу вопросы и дам ответы\n\n"
@@ -65,6 +67,27 @@ async def handle_about(message: types.Message) -> None:
         "Разработчик: @born3life"
     )
     await message.answer(text)
+
+
+@router.message(Command("word"))
+async def handle_word_command(message: types.Message) -> None:
+    text = message.text.removeprefix("/word").strip()
+    if not text:
+        await message.answer("❌ Напиши вопрос после /word\n\nПример: `/word перечисли СНиПы по бетону`")
+        return
+
+    wait_msg = await message.answer("⏳ Думаю...")
+    try:
+        answer = await ask(text)
+        docx_bytes = create_answer_docx(answer)
+        await message.answer_document(
+            types.BufferedInputFile(docx_bytes.read(), filename="answer.docx"),
+            caption="✅ Готово!",
+        )
+        await wait_msg.delete()
+    except Exception:
+        logger.exception("Error processing /word")
+        await wait_msg.edit_text("❌ Ошибка. Попробуй ещё раз.")
 
 
 @router.message(lambda msg: msg.document is not None)
@@ -129,10 +152,20 @@ async def handle_message(message: types.Message) -> None:
         if message.caption:
             text = message.caption
 
+        want_docx = any(kw in text.lower() for kw in ("ворд", "docx", ".docx", "в формате word", "документом"))
+
         wait_msg = await message.answer("⏳ Думаю...")
         try:
             answer = await ask(text)
-            await wait_msg.edit_text(answer)
+            if want_docx:
+                docx_bytes = create_answer_docx(answer)
+                await message.answer_document(
+                    types.BufferedInputFile(docx_bytes.read(), filename="answer.docx"),
+                    caption="✅ Готово!",
+                )
+                await wait_msg.delete()
+            else:
+                await wait_msg.edit_text(answer)
         except Exception:
             logger.exception("Error processing text")
             await wait_msg.edit_text("❌ Ошибка. Попробуй ещё раз.")
