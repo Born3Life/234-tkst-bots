@@ -3,7 +3,7 @@ services:
     name: study-bot
     runtime: docker
     plan: free
-    dockerfilePath: ./учет и контроль/Dockerfile
+    dockerfilePath: ./accounting and control/Dockerfile
     envVars:
       - key: BOT_TOKEN
         sync: false
