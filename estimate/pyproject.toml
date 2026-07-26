@@ -1,0 +1,16 @@
+[project]
+name = "estimate-bot"
+version = "0.1.0"
+description = "Telegram бот Сметное дело — эксперт по сметам, расценкам, КС-2, КС-3"
+requires-python = ">=3.11"
+dependencies = [
+    "aiogram>=3.27",
+    "aiohttp>=3.11",
+    "aiohttp-socks>=0.11.0",
+    "pdfplumber>=0.11",
+    "python-docx>=1.1",
+    "python-dotenv>=1.1",
+]
+
+[project.scripts]
+bot = "bot.__main__:main"
