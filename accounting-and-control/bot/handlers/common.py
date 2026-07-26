@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from base64 import b64encode
 
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_DOCS = {"pdf", "docx"}
 MAX_CHUNKS = 5
+MAX_PAGES = 30
 MAX_TEXT_LEN = 4000
 
 
@@ -134,13 +136,18 @@ async def _process_document(
         file_bytes = raw.read()
 
         if ext == "pdf" and is_scanned_pdf(file_bytes):
-            pages = pdf_pages_as_base64(file_bytes)
+            pages = pdf_pages_as_base64(file_bytes, max_pages=MAX_PAGES)
             results = []
             for i, b64 in enumerate(pages, 1):
                 await wait_msg.edit_text(f"⏳ Распознаю страницу {i}/{len(pages)}...")
                 prompt = caption or "Прочитай и перепиши весь текст с этого изображения"
-                answer = await ask(prompt, image_base64=b64)
-                results.append(f"=== Страница {i} ===\n\n{answer}")
+                try:
+                    answer = await ask(prompt, image_base64=b64)
+                    results.append(f"=== Страница {i} ===\n\n{answer}")
+                except Exception:
+                    logger.exception("Page %d failed", i)
+                    results.append(f"=== Страница {i} ===\n\n⚠️ Ошибка распознавания страницы")
+                await asyncio.sleep(0.5)
             full = "\n\n".join(results)
         else:
             text = extract_text(file_bytes, ext)
@@ -149,8 +156,13 @@ async def _process_document(
             for i, chunk in enumerate(chunks, 1):
                 await wait_msg.edit_text(f"⏳ Обрабатываю часть {i}/{len(chunks)}...")
                 prompt = f"{caption}\n\n{chunk}" if caption else chunk
-                answer = await ask(prompt)
-                results.append(f"=== Часть {i} ===\n\n{answer}")
+                try:
+                    answer = await ask(prompt)
+                    results.append(f"=== Часть {i} ===\n\n{answer}")
+                except Exception:
+                    logger.exception("Chunk %d failed", i)
+                    results.append(f"⚠️ Ошибка обработки части {i}")
+                await asyncio.sleep(0.5)
             full = "\n\n".join(results)
 
         await _send_result(message, full, wait_msg, as_docx)
