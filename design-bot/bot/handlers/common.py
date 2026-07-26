@@ -36,8 +36,7 @@ def strip_cmd(text: str) -> str:
 router = Router()
 
 BOT_SPECIALTY = "design"
-BOT_NAME = "🏗 Проектирование зданий"
-CHAT_MODES: dict[int, str] = {}
+BOT_USERNAME = "@Group234TKST_bot"
 
 SPECIALTY_INFO = {
     "accounting": {
@@ -56,6 +55,16 @@ SPECIALTY_INFO = {
         "username": "@estimateTKST_bot",
     },
 }
+
+
+def mentioned(message: types.Message) -> bool:
+    if message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.is_bot:
+        return True
+    if message.text and BOT_USERNAME.lower() in message.text.lower():
+        return True
+    if message.caption and BOT_USERNAME.lower() in message.caption.lower():
+        return True
+    return False
 
 
 @router.message(Command("start"))
@@ -112,40 +121,38 @@ async def handle_about(message: types.Message) -> None:
     await message.answer(text)
 
 
+@router.message(Command("ping"))
+async def handle_ping(message: types.Message) -> None:
+    await message.answer("✅ Бот работает")
+
+
 @router.message(Command("menu"))
 async def handle_menu(message: types.Message) -> None:
-    info = SPECIALTY_INFO[BOT_SPECIALTY]
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text=info["name"], callback_data=f"mode_{BOT_SPECIALTY}")],
+        [types.InlineKeyboardButton(text=info["name"], callback_data=f"info_{k}")]
+        for k, info in SPECIALTY_INFO.items()
     ])
     await message.answer(
-        f"🎯 <b>{info['name']}</b>\n{info['desc']}\n\nНажми кнопку, чтобы задать вопрос",
+        "🎯 <b>Боты-помощники</b>\n\n"
+        "Нажми на кнопку — я покажу как вызвать нужного бота\n"
+        "Или просто напиши @bot_username + вопрос",
         reply_markup=kb,
     )
 
 
-@router.callback_query(F.data.startswith("mode_"))
-async def handle_mode_callback(callback: types.CallbackQuery) -> None:
-    mode = callback.data.replace("mode_", "")
+@router.callback_query(F.data.startswith("info_"))
+async def handle_info_callback(callback: types.CallbackQuery) -> None:
+    mode = callback.data.replace("info_", "")
     info = SPECIALTY_INFO.get(mode)
     if not info:
         await callback.answer("❌ Неизвестное направление")
         return
-
-    CHAT_MODES[callback.message.chat.id] = mode
-
-    if mode == BOT_SPECIALTY:
-        await callback.message.edit_text(
-            f"✅ <b>{info['name']}</b>\n{info['desc']}\n\n✍️ Напиши вопрос — я отвечу",
-            reply_markup=None,
-        )
-    else:
-        await callback.message.edit_text(
-            f"✅ <b>{info['name']}</b>\n{info['desc']}\n\n"
-            f"Этот бот ({BOT_NAME}) не отвечает за эту тему.\n"
-            f"Напиши {info['username']} вопрос",
-            reply_markup=None,
-        )
+    await callback.message.edit_text(
+        f"✅ <b>{info['name']}</b>\n{info['desc']}\n\n"
+        f"Напиши: {info['username']} + твой вопрос\n"
+        f"Или используй /ask@{info['username'].lstrip('@')} вопрос",
+        reply_markup=None,
+    )
     await callback.answer()
 
 
@@ -309,19 +316,15 @@ async def handle_ask(message: types.Message) -> None:
 
 @router.message(lambda msg: msg.document is not None)
 async def handle_document(message: types.Message) -> None:
-    if is_group(message):
-        mode = CHAT_MODES.get(message.chat.id)
-        if mode is not None and mode != BOT_SPECIALTY:
-            return
+    if is_group(message) and not mentioned(message):
+        return
     await _process_document(message, message.document, message.caption or "", as_docx=True)
 
 
 @router.message()
 async def handle_message(message: types.Message) -> None:
-    if is_group(message):
-        mode = CHAT_MODES.get(message.chat.id)
-        if mode is not None and mode != BOT_SPECIALTY:
-            return
+    if is_group(message) and not mentioned(message):
+        return
 
     if message.text:
         text = message.text
