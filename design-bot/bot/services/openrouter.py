@@ -131,22 +131,43 @@ SYSTEM_PROMPT = (
 )
 
 
+async def _transcribe_image(image_base64: str) -> str:
+    payload = {
+        "model": VISION_MODEL,
+        "messages": [
+            {"role": "user", "content": "Перепиши весь текст с этого изображения максимально точно и полностью, ничего не добавляя от себя. Только текст который ты видишь.", "images": [image_base64]},
+        ],
+        "stream": False,
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(API_URL, json=payload, timeout=aiohttp.ClientTimeout(total=120)) as resp:
+                data = await resp.json()
+        return (data.get("message", {}) or {}).get("content", "") or ""
+    except Exception:
+        logger.exception("Transcription failed")
+        return ""
+
+
 async def ask(prompt: str, image_base64: str | None = None) -> str:
-    content = prompt
+    if image_base64:
+        transcribed = await _transcribe_image(image_base64)
+        if transcribed:
+            prompt = f"Пользователь отправил фото с текстом:\n\n{transcribed}\n\n---\nЗапрос пользователя: {prompt}"
+        else:
+            prompt = f"{prompt}\n\n(фото не удалось распознать)"
 
     payload = {
-        "model": VISION_MODEL if image_base64 else TEXT_MODEL,
+        "model": TEXT_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": content},
+            {"role": "user", "content": prompt},
         ],
         "stream": False,
         "options": {
             "temperature": 0.3,
         },
     }
-    if image_base64:
-        payload["messages"][1]["images"] = [image_base64]
 
     try:
         async with aiohttp.ClientSession() as session:
