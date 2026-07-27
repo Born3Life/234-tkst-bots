@@ -6,7 +6,7 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-API_URL = "https://tri-sole-passed-glance.trycloudflare.com/api/chat"
+API_URL = "https://synthetic-gain-macro-declared.trycloudflare.com/api/chat"
 TEXT_MODEL = "gemma3:12b"
 VISION_MODEL = "llava"
 
