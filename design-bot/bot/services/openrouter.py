@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import logging
-from os import getenv
 
 import aiohttp
 
 logger = logging.getLogger(__name__)
 
-API_URL = "https://api.deepseek.com/v1/chat/completions"
-TEXT_MODEL = "deepseek-chat"
-VISION_MODEL = "deepseek-vl2"
+# После запуска Colab заменить на URL из вывода ноутбука
+API_URL = "http://localhost:11434/api/chat"
+MODEL = "llava"
 
 SYSTEM_PROMPT = (
     "Ты — профессиональный эксперт по дисциплине «Проектирование зданий» "
@@ -133,46 +132,33 @@ SYSTEM_PROMPT = (
 
 
 async def ask(prompt: str, image_base64: str | None = None) -> str:
-    key = getenv("DEEPSEEK_API_KEY")
-    if not key:
-        return "❌ DEEPSEEK_API_KEY не настроен в .env"
-
-    content: list[dict] = [{"type": "text", "text": prompt}]
-    if image_base64:
-        content.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
-            }
-        )
+    content = prompt
 
     payload = {
-        "model": VISION_MODEL if image_base64 else TEXT_MODEL,
+        "model": MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": content},
         ],
-        "max_tokens": 4096,
-        "temperature": 0.3,
+        "stream": False,
+        "options": {
+            "temperature": 0.3,
+        },
     }
-
-    headers = {
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-    }
+    if image_base64:
+        payload["messages"][1]["images"] = [image_base64]
 
     try:
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.post(API_URL, json=payload, timeout=aiohttp.ClientTimeout(total=120)) as resp:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(API_URL, json=payload, timeout=aiohttp.ClientTimeout(total=300)) as resp:
                 data = await resp.json()
 
         if "error" in data:
-            err = data["error"]
-            logger.warning("DeepSeek error: %s", err.get("message", err))
-            return "❌ Сервис временно недоступен. Попробуй позже."
+            logger.warning("Ollama error: %s", data["error"])
+            return "❌ Модель недоступна. Проверь Colab."
 
-        content = data["choices"][0]["message"]["content"] or ""
+        content = data["message"]["content"] or ""
         return content.strip() or "❌ Пустой ответ от модели."
     except Exception:
-        logger.exception("DeepSeek request failed")
-        return "❌ Ошибка при запросе. Попробуй позже."
+        logger.exception("Ollama request failed")
+        return "❌ Ошибка при запросе к модели. Проверь Colab."
