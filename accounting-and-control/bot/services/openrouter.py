@@ -7,7 +7,7 @@ import aiohttp
 logger = logging.getLogger(__name__)
 
 # После запуска Colab заменить на URL из вывода ноутбука
-API_URL = "http://localhost:11434/api/chat"
+API_URL = "https://enable-terry-someone-douglas.trycloudflare.com/api/chat"
 MODEL = "llava"
 
 SYSTEM_PROMPT = (
