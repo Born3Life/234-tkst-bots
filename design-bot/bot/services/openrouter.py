@@ -6,7 +6,7 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-API_URL = "https://typically-tier-optimal-rpg.trycloudflare.com/api/chat"
+API_URL = "https://stock-conditions-indicates-estates.trycloudflare.com/api/chat"
 TEXT_MODEL = "gemma3:12b"
 VISION_MODEL = "llava"
 
