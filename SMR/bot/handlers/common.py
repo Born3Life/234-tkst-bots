@@ -10,7 +10,6 @@ from aiogram.filters import Command
 from bot.services.docx_writer import create_answer_docx
 from bot.services.file_reader import (
     extract_text,
-    is_scanned_pdf,
     pdf_pages_as_base64,
 )
 from bot.services.openrouter import ask
@@ -33,8 +32,8 @@ def strip_cmd(text: str) -> str:
 
 router = Router()
 
-BOT_SPECIALTY = "accounting"
-BOT_USERNAME = "@GroupTKST_bot"
+BOT_SPECIALTY = "smr"
+BOT_USERNAME = "@smrTKST_bot"
 
 SPECIALTY_INFO = {
     "accounting": {
@@ -73,16 +72,19 @@ def mentioned(message: types.Message) -> bool:
 @router.message(Command("start"))
 async def handle_start(message: types.Message) -> None:
     text = (
-        "📐 <b>Учёт и контроль — эксперт по строительству</b>\n\n"
-        "Я помогаю с вопросами по дисциплине «Учёт и контроль»\n"
+        "🔧 <b>Строительно-монтажные работы — эксперт по СМР</b>\n\n"
+        "Я помогаю с вопросами по дисциплине «Строительно-монтажные работы»\n"
         "специальности «Строительство и эксплуатация зданий и сооружений».\n\n"
-        "📝 <b>Что умею:</b>\n"
-        "• Отвечаю на вопросы по учёту, сметам, СНиПам\n"
-        "• Читаю фото заданий, тестов, текстов\n"
-        "• Решаю тесты, разбираю задачи\n"
-        "• Читаю PDF и Word файлы, делаю выжимку в .docx\n"
-        "• Объясняю нормативные документы\n\n"
-        "📎 <b>Пришли фото, PDF, Word или напиши вопрос</b>\n"
+        "🏗 <b>Что умею:</b>\n"
+        "• Консультирую по технологии производства СМР\n"
+        "• Помогаю с ППР, ПОС, технологическими картами\n"
+        "• Анализирую фото стройки, чертежей, схем, узлов\n"
+        "• Проверяю акты КС-2, КС-3, исполнительную документацию\n"
+        "• Объясняю бетонные, каменные, кровельные работы\n"
+        "• Консультирую по монтажу, отделке, инженерным системам\n"
+        "• Рассказываю об охране труда и технике безопасности\n"
+        "• Ссылаюсь на СП, СНиП, ГОСТ, приказы Минтруда\n\n"
+        "📎 <b>Пришли фото, PDF проекта или напиши вопрос</b>\n"
         "💾 <b>/word (текст)</b> — ответ в формате .docx"
     )
     await message.answer(text)
@@ -92,20 +94,20 @@ async def handle_start(message: types.Message) -> None:
 async def handle_help(message: types.Message) -> None:
     text = (
         "💡 <b>Как пользоваться:</b>\n\n"
-        "• Напиши вопрос текстом — я отвечу\n"
+        "• Напиши вопрос по СМР — я отвечу\n"
         "• /ask (вопрос) — задать вопрос\n"
         "• /word (вопрос) — ответ в .docx\n"
-        "• Пришли фото задания — прочитаю и решу\n"
-        "• Пришли PDF или Word — извлеку текст и отвечу в .docx\n\n"
+        "• Пришли фото стройки, чертежа или узла — проанализирую\n"
+        "• Пришли PDF с проектной документацией — извлеку данные\n\n"
         "👥 <b>В группе:</b>\n"
         "• /menu — кнопки со всеми направлениями\n"
         "• Нажми кнопку → напиши вопрос → я отвечу\n"
         "• Пришли файл/фото — обработаю\n"
         "• /word (вопрос) — ответ в формате .docx\n"
         "• /ask@bot (вопрос) — вызвать конкретного бота\n\n"
-        "📌 <b>Пример тем:</b> сметное дело, КС-2, КС-3, технадзор, "
-        "исполнительная документация, журналы работ, СНиП, СП, "
-        "контроль качества, приёмка работ, охрана труда"
+        "📌 <b>Примеры тем:</b> технология бетонирования, кладка стен, "
+        "монтаж плит перекрытия, кровельные работы, ППР, "
+        "акты скрытых работ, охрана труда"
     )
     await message.answer(text)
 
@@ -114,9 +116,10 @@ async def handle_help(message: types.Message) -> None:
 async def handle_about(message: types.Message) -> None:
     text = (
         "🧠 <b>О боте</b>\n\n"
-        "Модель: Google Gemma 4 26B\n"
-        "Платформа: OpenRouter API\n"
-        "Специализация: Учёт и контроль в строительстве\n\n"
+        "Модель: DeepSeek Chat / DeepSeek VL2\n"
+        "Платформа: DeepSeek API\n"
+        "Специализация: Строительно-монтажные работы\n"
+        "Уровень: Главный инженер ПТО\n\n"
         "Разработчик: @born3life"
     )
     await message.answer(text)
@@ -176,14 +179,14 @@ async def process_replied(message: types.Message, as_docx: bool = False) -> None
         try:
             photo = target.photo[-1]
             file = await message.bot.get_file(photo.file_id)
-            raw = await asyncio.wait_for(message.bot.download_file(file.file_path), timeout=180)
+            raw = await message.bot.download_file(file.file_path)
             b64 = b64encode(raw.read()).decode()
-            caption = target.caption or "Что изображено на этом фото? Ответь подробно."
+            caption = target.caption or "Что изображено на этом объекте, чертеже или схеме? Проанализируй подробно."
             answer = await ask(caption, image_base64=b64)
             await _send_result(message, answer, wait_msg, as_docx)
         except Exception:
             logger.exception("Error processing replied photo")
-            await wait_msg.edit_text("❌ Ошибка при обработке фото")
+            await wait_msg.edit_text("❌ Ошибка при обработке изображения")
         return
 
     if target.document:
@@ -201,7 +204,7 @@ async def _process_document(
 ) -> None:
     ext = doc.file_name.rsplit(".", 1)[-1].lower() if doc.file_name else ""
     if ext not in SUPPORTED_DOCS:
-        await message.answer("❌ Поддерживаю только PDF и DOCX")
+        await message.answer("❌ Поддерживаю только PDF и DOCX. Для DWG/DXF отправь скриншот.")
         return
 
     wait_msg = await message.answer("⏳ Читаю файл...")
@@ -215,7 +218,7 @@ async def _process_document(
             results = []
             for i, b64 in enumerate(pages, 1):
                 await wait_msg.edit_text(f"⏳ Распознаю страницу {i}/{len(pages)}...")
-                prompt = caption or "Прочитай и перепиши весь текст с этого изображения"
+                prompt = caption or "Прочитай и перепиши весь текст и данные с этого документа или чертежа"
                 try:
                     answer = await ask(prompt, image_base64=b64)
                     results.append(f"=== Страница {i} ===\n\n{answer}")
@@ -268,7 +271,7 @@ async def handle_word(message: types.Message) -> None:
     if not text:
         await message.answer(
             "❌ Напиши вопрос или ответь на сообщение с файлом/фото\n\n"
-            "Пример: `/word перечисли СНиПы`"
+            "Пример: `/word технология монтажа плит перекрытия`"
         )
         return
 
@@ -296,7 +299,7 @@ async def handle_ask(message: types.Message) -> None:
     if not text:
         await message.answer(
             "❌ Напиши вопрос или ответь на сообщение\n\n"
-            "Пример: `/ask что такое КС-2?`"
+            "Пример: `/ask как армировать ленточный фундамент`"
         )
         return
 
@@ -341,16 +344,16 @@ async def handle_message(message: types.Message) -> None:
 
     elif message.photo:
         photo = message.photo[-1]
-        caption = message.caption or "Что изображено на этом фото? Ответь подробно."
+        caption = message.caption or "Что изображено на этом объекте или чертеже? Проанализируй подробно."
 
         wait_msg = await message.answer("⏳ Анализирую изображение...")
         try:
             file = await message.bot.get_file(photo.file_id)
-            file_bytes = await asyncio.wait_for(message.bot.download_file(file.file_path), timeout=180)
+            file_bytes = await message.bot.download_file(file.file_path)
             b64 = b64encode(file_bytes.read()).decode()
 
             answer = await ask(caption, image_base64=b64)
             await _send_result(message, answer, wait_msg, as_docx=False)
         except Exception:
             logger.exception("Error processing photo")
-            await wait_msg.edit_text("❌ Ошибка при обработке фото. Попробуй ещё раз.")
+            await wait_msg.edit_text("❌ Ошибка при обработке изображения. Попробуй ещё раз.")

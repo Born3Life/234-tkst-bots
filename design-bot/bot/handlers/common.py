@@ -9,7 +9,6 @@ from aiogram.filters import Command
 
 from bot.services.docx_writer import create_answer_docx
 from bot.services.file_reader import (
-    chunk_text,
     extract_text,
     is_scanned_pdf,
     pdf_pages_as_base64,
@@ -19,7 +18,6 @@ from bot.services.openrouter import ask
 logger = logging.getLogger(__name__)
 
 SUPPORTED_DOCS = {"pdf", "docx"}
-MAX_CHUNKS = 15
 MAX_PAGES = 30
 MAX_TEXT_LEN = 4000
 
@@ -53,6 +51,11 @@ SPECIALTY_INFO = {
         "name": "📊 Сметное дело",
         "desc": "ФЕР, ТЕР, ГЭСН, индексы, ЛСР, КС-2, Гранд-Смета",
         "username": "@estimateTKST_bot",
+    },
+    "smr": {
+        "name": "🔧 Строительно-монтажные работы",
+        "desc": "Технология СМР, ППР, стройплощадка, охрана труда, исполнительная документация",
+        "username": "@smrTKST_bot",
     },
 }
 
@@ -209,7 +212,7 @@ async def _process_document(
         raw = await asyncio.wait_for(message.bot.download_file(file.file_path), timeout=180)
         file_bytes = raw.read()
 
-        if ext == "pdf" and is_scanned_pdf(file_bytes):
+        if ext == "pdf":
             pages = pdf_pages_as_base64(file_bytes, max_pages=MAX_PAGES)
             results = []
             for i, b64 in enumerate(pages, 1):
@@ -225,19 +228,14 @@ async def _process_document(
             full = "\n\n".join(results)
         else:
             text = extract_text(file_bytes, ext)
-            chunks = chunk_text(text)[:MAX_CHUNKS]
-            results = []
-            for i, chunk in enumerate(chunks, 1):
-                await wait_msg.edit_text(f"⏳ Обрабатываю часть {i}/{len(chunks)}...")
-                prompt = f"{caption}\n\n{chunk}" if caption else chunk
-                try:
-                    answer = await ask(prompt)
-                    results.append(f"=== Часть {i} ===\n\n{answer}")
-                except Exception:
-                    logger.exception("Chunk %d failed", i)
-                    results.append(f"=== Часть {i} ===\n\n⚠️ Ошибка обработки части")
-                await asyncio.sleep(0.5)
-            full = "\n\n".join(results)
+            prompt = f"{caption}\n\nДокумент:\n{text}" if caption else f"Документ:\n{text}"
+            await wait_msg.edit_text("⏳ Анализирую документ...")
+            try:
+                answer = await ask(prompt)
+                full = answer
+            except Exception:
+                logger.exception("Error processing full document")
+                full = "⚠️ Ошибка при анализе документа. Попробуй ещё раз."
 
         await _send_result(message, full, wait_msg, as_docx)
     except Exception:

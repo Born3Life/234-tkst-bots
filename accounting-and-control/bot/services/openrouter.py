@@ -7,8 +7,9 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = "google/gemma-4-26b-a4b-it:free"
+API_URL = "https://api.deepseek.com/v1/chat/completions"
+TEXT_MODEL = "deepseek-chat"
+VISION_MODEL = "deepseek-vl2"
 
 SYSTEM_PROMPT = (
     "Ты — профессиональный эксперт по дисциплине «Учёт и контроль в строительстве» "
@@ -35,9 +36,9 @@ SYSTEM_PROMPT = (
 
 
 async def ask(prompt: str, image_base64: str | None = None) -> str:
-    key = getenv("OPENROUTER_API_KEY")
+    key = getenv("DEEPSEEK_API_KEY")
     if not key:
-        return "❌ OPENROUTER_API_KEY не настроен в .env"
+        return "❌ DEEPSEEK_API_KEY не настроен в .env"
 
     content: list[dict] = [{"type": "text", "text": prompt}]
     if image_base64:
@@ -49,7 +50,7 @@ async def ask(prompt: str, image_base64: str | None = None) -> str:
         )
 
     payload = {
-        "model": MODEL,
+        "model": VISION_MODEL if image_base64 else TEXT_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": content},
@@ -70,11 +71,11 @@ async def ask(prompt: str, image_base64: str | None = None) -> str:
 
         if "error" in data:
             err = data["error"]
-            logger.warning("OpenRouter error: %s", err.get("message", err))
+            logger.warning("DeepSeek error: %s", err.get("message", err))
             return "❌ Сервис временно недоступен. Попробуй позже."
 
         content = data["choices"][0]["message"]["content"] or ""
         return content.strip() or "❌ Пустой ответ от модели."
     except Exception:
-        logger.exception("OpenRouter request failed")
+        logger.exception("DeepSeek request failed")
         return "❌ Ошибка при запросе. Попробуй позже."

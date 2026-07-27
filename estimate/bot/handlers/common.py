@@ -54,6 +54,11 @@ SPECIALTY_INFO = {
         "desc": "ФЕР, ТЕР, ГЭСН, индексы, ЛСР, КС-2, Гранд-Смета",
         "username": "@estimateTKST_bot",
     },
+    "smr": {
+        "name": "🔧 Строительно-монтажные работы",
+        "desc": "Технология СМР, ППР, стройплощадка, охрана труда, исполнительная документация",
+        "username": "@smrTKST_bot",
+    },
 }
 
 
@@ -209,7 +214,7 @@ async def _process_document(
         raw = await message.bot.download_file(file.file_path)
         file_bytes = raw.read()
 
-        if ext == "pdf" and is_scanned_pdf(file_bytes):
+        if ext == "pdf":
             pages = pdf_pages_as_base64(file_bytes, max_pages=MAX_PAGES)
             results = []
             for i, b64 in enumerate(pages, 1):
