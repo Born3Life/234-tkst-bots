@@ -211,19 +211,30 @@ async def _process_document(
         file_bytes = raw.read()
 
         if ext == "pdf":
-            pages = pdf_pages_as_base64(file_bytes, max_pages=MAX_PAGES)
-            results = []
-            for i, b64 in enumerate(pages, 1):
-                await wait_msg.edit_text(f"⏳ Распознаю страницу {i}/{len(pages)}...")
-                prompt = caption or "Прочитай и перепиши весь текст с этого изображения"
+            if not is_scanned_pdf(file_bytes):
+                text = extract_text(file_bytes, ext)
+                prompt = f"{caption}\n\nДокумент:\n{text}" if caption else f"Документ:\n{text}"
+                await wait_msg.edit_text("⏳ Анализирую документ...")
                 try:
-                    answer = await ask(prompt, image_base64=b64)
-                    results.append(f"=== Страница {i} ===\n\n{answer}")
+                    answer = await ask(prompt)
+                    full = answer
                 except Exception:
-                    logger.exception("Page %d failed", i)
-                    results.append(f"=== Страница {i} ===\n\n⚠️ Ошибка распознавания страницы")
-                await asyncio.sleep(0.5)
-            full = "\n\n".join(results)
+                    logger.exception("Error processing PDF text")
+                    full = "⚠️ Ошибка при анализе документа."
+            else:
+                pages = pdf_pages_as_base64(file_bytes, max_pages=MAX_PAGES)
+                results = []
+                for i, b64 in enumerate(pages, 1):
+                    await wait_msg.edit_text(f"⏳ Распознаю страницу {i}/{len(pages)}...")
+                    prompt = caption or "Прочитай и перепиши весь текст с этого изображения"
+                    try:
+                        answer = await ask(prompt, image_base64=b64)
+                        results.append(f"=== Страница {i} ===\n\n{answer}")
+                    except Exception:
+                        logger.exception("Page %d failed", i)
+                        results.append(f"=== Страница {i} ===\n\n⚠️ Ошибка распознавания страницы")
+                    await asyncio.sleep(0.5)
+                full = "\n\n".join(results)
         else:
             text = extract_text(file_bytes, ext)
             prompt = f"{caption}\n\nДокумент:\n{text}" if caption else f"Документ:\n{text}"

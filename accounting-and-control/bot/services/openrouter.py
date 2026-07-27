@@ -46,6 +46,9 @@ async def _transcribe_image(image_base64: str) -> str:
         async with aiohttp.ClientSession() as session:
             async with session.post(API_URL, json=payload, timeout=aiohttp.ClientTimeout(total=120)) as resp:
                 data = await resp.json()
+        if "error" in data:
+            logger.warning("Vision model error: %s", data["error"])
+            return ""
         return (data.get("message", {}) or {}).get("content", "") or ""
     except Exception:
         logger.exception("Transcription failed")
@@ -79,7 +82,7 @@ async def ask(prompt: str, image_base64: str | None = None) -> str:
 
         if "error" in data:
             logger.warning("Ollama error: %s", data["error"])
-            return "❌ Модель недоступна. Проверь Colab."
+            return f"❌ Ошибка модели: {data['error']}"
 
         content = data["message"]["content"] or ""
         return content.strip() or "❌ Пустой ответ от модели."
