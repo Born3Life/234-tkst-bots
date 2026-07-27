@@ -6,9 +6,9 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-# После запуска Colab заменить на URL из вывода ноутбука
 API_URL = "https://eco-laser-nevada-minimize.trycloudflare.com/api/chat"
-MODEL = "llava"
+TEXT_MODEL = "gemma3:12b"
+VISION_MODEL = "llava"
 
 SYSTEM_PROMPT = (
     "Ты — профессиональный эксперт по дисциплине «Строительно-монтажные работы (СМР)» "
@@ -212,7 +212,7 @@ async def ask(prompt: str, image_base64: str | None = None) -> str:
     content = prompt
 
     payload = {
-        "model": MODEL,
+        "model": VISION_MODEL if image_base64 else TEXT_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": content},
