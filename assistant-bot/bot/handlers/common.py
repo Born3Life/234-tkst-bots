@@ -253,7 +253,7 @@ async def handle_addlesson(message: types.Message) -> None:
         return
 
     schedule_mgr.add_lesson(message.chat.id, weekday, time_str, subject, room)
-    await message.answer(f"Добавлено: {weekday_ru} {time_str} — {subject} {f'({room})' if room else ''}')
+    await message.answer(f"Добавлено: {weekday_ru} {time_str} — {subject}" + (f" ({room})" if room else ""))
     await start_reminder(message.bot, message.chat.id)
 
 
@@ -456,3 +456,4 @@ async def _send_result(message: types.Message, text: str, wait_msg: types.Messag
         await wait_msg.delete()
     else:
         await wait_msg.edit_text(text)
+
