@@ -59,6 +59,11 @@ SPECIALTY_INFO = {
         "desc": "Технология СМР, ППР, стройплощадка, охрана труда, исполнительная документация",
         "username": "@smrTKST_bot",
     },
+    "assistant": {
+        "name": "🤖 Помощник группы",
+        "desc": "Расписание, память 5 дней, помощь с учёбой",
+        "username": "@AssistantAiGroup234_bot",
+    },
 }
 
 
@@ -136,6 +141,7 @@ async def handle_menu(message: types.Message) -> None:
     info = SPECIALTY_INFO[BOT_SPECIALTY]
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text=info["name"], callback_data=f"info_{BOT_SPECIALTY}")],
+        [types.InlineKeyboardButton(text="🤖 Помощник группы", url="https://t.me/AssistantAiGroup234_bot")],
     ])
     await message.answer(
         f"🎯 <b>{info['name']}</b>\n{info['desc']}\n\n"
