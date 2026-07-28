@@ -4,9 +4,9 @@ RUN apt-get update -qq && apt-get install -y -qq libgl1-mesa-glx libglib2.0-0 &&
 
 WORKDIR /app
 
-COPY assistant-bot/pyproject.toml ./
+COPY pyproject.toml ./
 RUN pip install uv && uv sync
 
-COPY assistant-bot/ .
+COPY . .
 
 CMD ["uv", "run", "python", "-m", "bot"]
