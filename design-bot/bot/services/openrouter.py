@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import logging
+import os
 
 import aiohttp
 
 logger = logging.getLogger(__name__)
 
-API_URL = "https://stock-conditions-indicates-estates.trycloudflare.com/api/chat"
-TEXT_MODEL = "gemma3:12b"
-VISION_MODEL = "llava"
+API_URL = "https://api.deepseek.com/v1/chat/completions"
+TEXT_MODEL = "deepseek-chat"
+VISION_MODEL = "deepseek-vl2"
+API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
 SYSTEM_PROMPT = (
     "Ты — профессиональный эксперт по дисциплине «Проектирование зданий» "
@@ -135,18 +137,24 @@ async def _transcribe_image(image_base64: str) -> str:
     payload = {
         "model": VISION_MODEL,
         "messages": [
-            {"role": "user", "content": "Перепиши весь текст с этого изображения максимально точно и полностью, ничего не добавляя от себя. Только текст который ты видишь.", "images": [image_base64]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Перепиши весь текст с этого изображения максимально точно и полностью, ничего не добавляя от себя. Только текст который ты видишь."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
+                ],
+            },
         ],
         "stream": False,
     }
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(API_URL, json=payload, timeout=aiohttp.ClientTimeout(total=120)) as resp:
+            async with session.post(API_URL, json=payload, headers={"Authorization": f"Bearer {API_KEY}"}, timeout=aiohttp.ClientTimeout(total=120)) as resp:
                 data = await resp.json()
         if "error" in data:
             logger.warning("Vision model error: %s", data["error"])
             return ""
-        return (data.get("message", {}) or {}).get("content", "") or ""
+        return (data.get("choices", [{}])[0].get("message", {}) or {}).get("content", "") or ""
     except Exception:
         logger.exception("Transcription failed")
         return ""
@@ -167,22 +175,20 @@ async def ask(prompt: str, image_base64: str | None = None) -> str:
             {"role": "user", "content": prompt},
         ],
         "stream": False,
-        "options": {
-            "temperature": 0.3,
-        },
+        "temperature": 0.3,
     }
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(API_URL, json=payload, timeout=aiohttp.ClientTimeout(total=300)) as resp:
+            async with session.post(API_URL, json=payload, headers={"Authorization": f"Bearer {API_KEY}"}, timeout=aiohttp.ClientTimeout(total=120)) as resp:
                 data = await resp.json()
 
         if "error" in data:
-            logger.warning("Ollama error: %s", data["error"])
+            logger.warning("DeepSeek error: %s", data["error"])
             return f"❌ Ошибка модели: {data['error']}"
 
-        content = data["message"]["content"] or ""
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
         return content.strip() or "❌ Пустой ответ от модели."
     except Exception:
-        logger.exception("Ollama request failed")
-        return "❌ Ошибка при запросе к модели. Проверь Colab."
+        logger.exception("DeepSeek request failed")
+        return "❌ Ошибка при запросе к DeepSeek. Баланс закончился?"
