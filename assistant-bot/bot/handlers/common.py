@@ -46,7 +46,7 @@ def is_group(message: types.Message) -> bool:
     return message.chat.type in ("group", "supergroup")
 
 
-async def is_admin(bot: Bot, chat_id: int, user_id: int) -> bool:
+async def is_group_admin(bot: Bot, chat_id: int, user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id, user_id)
         return member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
@@ -176,7 +176,7 @@ async def handle_fullschedule(message: types.Message) -> None:
 
 @router.message(Command("setschedule"))
 async def handle_setschedule(message: types.Message) -> None:
-    if not await is_admin(message.bot, message.chat.id, message.from_user.id):
+    if not await is_group_admin(message.bot, message.chat.id, message.from_user.id):
         await message.answer("Эта команда только для админов группы.")
         return
 
@@ -246,7 +246,7 @@ async def handle_setschedule(message: types.Message) -> None:
 
 @router.message(Command("addlesson"))
 async def handle_addlesson(message: types.Message) -> None:
-    if not await is_admin(message.bot, message.chat.id, message.from_user.id):
+    if not await is_group_admin(message.bot, message.chat.id, message.from_user.id):
         await message.answer("Эта команда только для админов группы.")
         return
 
@@ -272,7 +272,7 @@ async def handle_addlesson(message: types.Message) -> None:
 
 @router.message(Command("removelesson"))
 async def handle_removelesson(message: types.Message) -> None:
-    if not await is_admin(message.bot, message.chat.id, message.from_user.id):
+    if not await is_group_admin(message.bot, message.chat.id, message.from_user.id):
         await message.answer("Эта команда только для админов группы.")
         return
 
@@ -302,7 +302,7 @@ async def handle_removelesson(message: types.Message) -> None:
 
 @router.message(Command("setremind"))
 async def handle_setremind(message: types.Message) -> None:
-    if not await is_admin(message.bot, message.chat.id, message.from_user.id):
+    if not await is_group_admin(message.bot, message.chat.id, message.from_user.id):
         await message.answer("Эта команда только для админов группы.")
         return
 
@@ -521,7 +521,7 @@ async def handle_message(message: types.Message) -> None:
             if "расписание" in user_text.lower() or "пары" in user_text.lower():
                 answer = today_schedule
                 if "помен" in user_text.lower() or "измен" in user_text.lower() or "исправ" in user_text.lower():
-                    if await is_admin(message.bot, message.chat.id, message.from_user.id):
+                    if await is_group_admin(message.bot, message.chat.id, message.from_user.id):
                         answer = "Напиши /addlesson чтобы добавить пару или /setschedule чтобы загрузить новое расписание."
                     else:
                         answer = "Изменить расписание может только админ группы."
