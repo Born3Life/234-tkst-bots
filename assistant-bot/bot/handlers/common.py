@@ -18,6 +18,17 @@ from bot.services.file_reader import (
     pdf_pages_as_base64,
 )
 from bot.services.openrouter import ask as deepseek_ask
+from bot.services.subscription_manager import (
+    BOT_KEYS,
+    ALL_BOTS,
+    ALL_BOTS_PRICE,
+    SUBSCRIPTION_DAYS,
+    add_subscription,
+    remove_subscription,
+    check_subscription,
+    ADMIN_IDS,
+)
+from bot.services.access import is_admin, can_access, increment_daily_count, sync_subscriptions
 from bot.services.schedule_manager import WEEKDAYS_RU
 
 logger = logging.getLogger(__name__)
@@ -444,6 +455,152 @@ async def handle_message(message: types.Message) -> None:
     except Exception:
         logger.exception("Error processing message")
         await wait_msg.edit_text("Ошибка при обработке. Попробуй ещё раз.")
+
+
+@router.message(Command("buy"))
+async def handle_buy(message: types.Message) -> None:
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[])
+    row = []
+    for i, (key, info) in enumerate(BOT_KEYS.items()):
+        btn = types.InlineKeyboardButton(text=f"{info['name']} — {info['price']}⭐", callback_data=f"buy_{key}")
+        row.append(btn)
+        if len(row) == 2 or i == len(BOT_KEYS) - 1:
+            kb.inline_keyboard.append(row)
+            row = []
+    kb.inline_keyboard.append([types.InlineKeyboardButton(text=f"Все 4 бота — {ALL_BOTS_PRICE}⭐", callback_data="buy_all")])
+
+    text_parts = ["💎 Подписка на ботов\n"]
+    for key, info in BOT_KEYS.items():
+        text_parts.append(f"{info['name']} — {info['price']}⭐ / {SUBSCRIPTION_DAYS} дн")
+    text_parts.append(f"\n🌟 Все 4 бота — {ALL_BOTS_PRICE}⭐ (скидка 25%)")
+    text_parts.append(f"\nВыбери ниже:")
+    await message.answer("\n".join(text_parts), reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("buy_"))
+async def handle_buy_callback(callback: types.CallbackQuery) -> None:
+    key = callback.data.replace("buy_", "")
+    prices = []
+
+    if key == "all":
+        amount = ALL_BOTS_PRICE
+        title = "Подписка на всех 4 ботов"
+        desc = f"Доступ ко всем ботам на {SUBSCRIPTION_DAYS} дней"
+        payload = "sub_all"
+    elif key in BOT_KEYS:
+        amount = BOT_KEYS[key]["price"]
+        title = f"Подписка: {BOT_KEYS[key]['name']}"
+        desc = f"Доступ к боту {BOT_KEYS[key]['name']} на {SUBSCRIPTION_DAYS} дней"
+        payload = f"sub_{key}"
+    else:
+        await callback.answer("Неизвестный бот")
+        return
+
+    prices.append(types.LabeledPrice(label=title, amount=amount))
+
+    await callback.message.answer_invoice(
+        title=title,
+        description=desc,
+        prices=prices,
+        provider_token="",
+        payload=payload,
+        currency="XTR",
+    )
+    await callback.answer()
+
+
+@router.pre_checkout_query()
+async def handle_pre_checkout(pre_checkout: types.PreCheckoutQuery) -> None:
+    await pre_checkout.answer(ok=True)
+
+
+@router.message(F.successful_payment)
+async def handle_successful_payment(message: types.Message) -> None:
+    user_id = message.from_user.id
+    payload = message.successful_payment.invoice_payload
+
+    if payload == "sub_all":
+        add_subscription(user_id, list(BOT_KEYS.keys()))
+        await message.answer(f"✅ Подписка на ВСЕХ 4 ботов активирована на {SUBSCRIPTION_DAYS} дней!")
+    elif payload.startswith("sub_"):
+        key = payload[4:]
+        if key in BOT_KEYS:
+            add_subscription(user_id, [key])
+            await message.answer(f"✅ Подписка на бота «{BOT_KEYS[key]['name']}» активирована на {SUBSCRIPTION_DAYS} дней!")
+
+
+@router.message(Command("grant"))
+async def handle_grant(message: types.Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Команда только для админов.")
+        return
+
+    parts = message.text.split(maxsplit=3)
+    if len(parts) < 4:
+        await message.answer("Формат: /grant @username bot_key [bot_key2 ...]\n/grant @username all\nКлючи: smr, design, estimate, accounting, all")
+        return
+
+    identifier = parts[1].strip()
+    bot_keys = parts[3:]
+    target_id = None
+
+    if identifier.startswith("@"):
+        try:
+            chat = await message.bot.get_chat(identifier)
+            target_id = chat.id
+        except Exception:
+            await message.answer(f"Не удалось найти пользователя {identifier}")
+            return
+    elif identifier.isdigit():
+        target_id = int(identifier)
+    else:
+        await message.answer("Укажи @username или ID пользователя")
+        return
+
+    keys_to_add = []
+    for k in bot_keys:
+        if k == "all":
+            keys_to_add.extend(BOT_KEYS.keys())
+        elif k in BOT_KEYS:
+            keys_to_add.append(k)
+
+    if not keys_to_add:
+        await message.answer(f"Нет валидных ключей. Доступны: {', '.join(BOT_KEYS.keys())}, all")
+        return
+
+    add_subscription(target_id, keys_to_add)
+    await message.answer(f"✅ Доступ выдан {identifier}: {', '.join(keys_to_add)} на {SUBSCRIPTION_DAYS} дней")
+
+
+@router.message(Command("revoke"))
+async def handle_revoke(message: types.Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Команда только для админов.")
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("Формат: /revoke @username\n/revoke 123456789")
+        return
+
+    identifier = parts[1].strip()
+    target_id = None
+
+    if identifier.startswith("@"):
+        try:
+            chat = await message.bot.get_chat(identifier)
+            target_id = chat.id
+        except Exception:
+            await message.answer(f"Не удалось найти пользователя {identifier}")
+            return
+    elif identifier.isdigit():
+        target_id = int(identifier)
+    else:
+        await message.answer("Укажи @username или ID")
+        return
+
+    remove_subscription(target_id)
+    await message.answer(f"Подписка {identifier} отозвана.")
 
 
 async def _send_result(message: types.Message, text: str, wait_msg: types.Message) -> None:

@@ -14,6 +14,7 @@ from bot.services.file_reader import (
     pdf_pages_as_base64,
 )
 from bot.services.openrouter import ask
+from bot.services.access import can_access, increment_daily_count
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ def strip_cmd(text: str) -> str:
 router = Router()
 
 BOT_SPECIALTY = "smr"
+BOT_KEY = "smr"
 BOT_USERNAME = "@smrTKST_bot"
 
 SPECIALTY_INFO = {
@@ -341,6 +343,12 @@ async def handle_document(message: types.Message) -> None:
 async def handle_message(message: types.Message) -> None:
     if is_group(message) and not mentioned(message):
         return
+
+    allowed, reason = can_access(message.from_user.id, BOT_KEY)
+    if not allowed:
+        await message.answer(reason)
+        return
+    increment_daily_count(message.from_user.id)
 
     if message.text:
         text = message.text

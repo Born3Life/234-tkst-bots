@@ -10,6 +10,7 @@ from aiohttp import web
 from dotenv import load_dotenv
 
 from bot.services.context import memory_mgr, schedule_mgr
+from bot.services.subscription_manager import get_all_active
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
@@ -26,9 +27,16 @@ async def health(_request: web.Request) -> web.Response:
     return web.Response(text="OK")
 
 
+async def subscriptions_endpoint(_request: web.Request) -> web.Response:
+    data = get_all_active()
+    clean = {str(uid): entry for uid, entry in data.items()}
+    return web.json_response(clean)
+
+
 async def _start_health() -> web.AppRunner:
     app = web.Application()
     app.router.add_get("/", health)
+    app.router.add_get("/api/subscriptions", subscriptions_endpoint)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", PORT)
