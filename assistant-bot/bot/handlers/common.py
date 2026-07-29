@@ -123,6 +123,7 @@ async def handle_start(message: types.Message) -> None:
         "/removelesson — (админ) удалить пару\n"
         "/setremind — (админ) установить время напоминания\n"
         "/clearmemory — очистить историю диалогов\n"
+        "/buy — 💎 купить подписку на ботов\n"
         "/menu — другие боты группы"
     )
     await message.answer(text)
@@ -142,6 +143,7 @@ async def handle_help(message: types.Message) -> None:
         "/setremind ЧЧ:ММ — время ежедневного напоминания\n"
         "  Пример: /setremind 07:45\n"
         "/clearmemory — очистить историю\n"
+        "/buy — 💎 подписка на ботов (100⭐ / 30 дн)\n"
         "/menu — другие боты"
     )
     await message.answer(text)

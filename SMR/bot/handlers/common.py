@@ -283,6 +283,12 @@ async def _send_result(
 
 @router.message(Command("word"))
 async def handle_word(message: types.Message) -> None:
+    allowed, reason = can_access(message.from_user.id, BOT_KEY)
+    if not allowed:
+        await message.answer(reason)
+        return
+    increment_daily_count(message.from_user.id)
+
     if message.reply_to_message:
         await process_replied(message, as_docx=True)
         return
@@ -311,6 +317,12 @@ async def handle_word(message: types.Message) -> None:
 
 @router.message(Command("ask"))
 async def handle_ask(message: types.Message) -> None:
+    allowed, reason = can_access(message.from_user.id, BOT_KEY)
+    if not allowed:
+        await message.answer(reason)
+        return
+    increment_daily_count(message.from_user.id)
+
     if message.reply_to_message:
         await process_replied(message, as_docx=False)
         return
@@ -336,6 +348,11 @@ async def handle_ask(message: types.Message) -> None:
 async def handle_document(message: types.Message) -> None:
     if is_group(message) and not mentioned(message):
         return
+    allowed, reason = can_access(message.from_user.id, BOT_KEY)
+    if not allowed:
+        await message.answer(reason)
+        return
+    increment_daily_count(message.from_user.id)
     await _process_document(message, message.document, message.caption or "", as_docx=True)
 
 
