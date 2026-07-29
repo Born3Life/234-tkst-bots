@@ -1,4 +1,4 @@
-from bot.handlers.common import router
 from bot.handlers.coursework import router as coursework_router
+from bot.handlers.common import router
 
-routers = [router, coursework_router]
+routers = [coursework_router, router]
