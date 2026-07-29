@@ -248,7 +248,7 @@ async def process_section(message: types.Message, state: FSMContext) -> None:
         return
 
     section = matched[0]
-    remaining = [m[0] for m in matched[1:]]
+    remaining = [m["number"].strip().lower().split()[0].rstrip(".") for m in matched[1:]]
 
     idx = sections.index(section)
     await state.update_data(editing_section=idx, section_queue=remaining)
