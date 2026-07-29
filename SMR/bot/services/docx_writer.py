@@ -20,6 +20,15 @@ def create_answer_docx(text: str) -> io.BytesIO:
 
     DARK_BLUE = RGBColor(0x00, 0x2B, 0x5C)
 
+    for level in range(1, 4):
+        hs = doc.styles[f"Heading {level}"]
+        hs.font.size = Pt(14)
+        hs.font.bold = True
+        hs.font.color.rgb = DARK_BLUE
+        hs.font.name = "Calibri"
+        hs.paragraph_format.space_before = Pt(12)
+        hs.paragraph_format.space_after = Pt(6)
+
     lines = text.split("\n")
     i = 0
     while i < len(lines):
@@ -29,13 +38,18 @@ def create_answer_docx(text: str) -> io.BytesIO:
             i += 1
             continue
 
+        if re.match(r'^#{4,}\s*$', stripped):
+            p = doc.add_paragraph()
+            run = p.add_run("—" * 30)
+            run.font.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
+            run.font.size = Pt(8)
+            i += 1
+            continue
+
         heading = re.match(r'^(#{1,3})\s+(.+)$', stripped)
         if heading:
-            level = len(heading.group(1))
             title = heading.group(2)
-            h = doc.add_heading(title, level=min(level, 3))
-            for run in h.runs:
-                run.font.color.rgb = DARK_BLUE
+            h = doc.add_heading(title, level=2)
             i += 1
             continue
 

@@ -4,6 +4,8 @@ import re
 
 
 def md_to_html(text: str) -> str:
+    text = re.sub(r'(?m)^#{4,}\s*.*$', '', text)
+
     text = re.sub(r'```(\w*)\n(.*?)```', r'<pre>\2</pre>', text, flags=re.DOTALL)
     text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
 
@@ -28,9 +30,8 @@ def md_to_html(text: str) -> str:
 
 def md_to_text(text: str) -> str:
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
-    text = re.sub(r'(?m)^###\s*', '', text)
-    text = re.sub(r'(?m)^##\s*', '', text)
-    text = re.sub(r'(?m)^#\s*', '', text)
+    text = re.sub(r'(?m)^#{2,}\s*', '', text)
+    text = re.sub(r'(?m)^#\s+(.*)$', r'\1', text)
     text = re.sub(r'(?m)^\*\s+', '- ', text)
     text = re.sub(r'`([^`]+)`', r'\1', text)
     text = re.sub(r'```(\w*)\n(.*?)```', r'\2', text, flags=re.DOTALL)
