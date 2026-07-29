@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from aiogram import F, Router, types
 from aiogram.exceptions import TelegramBadRequest
@@ -233,21 +234,12 @@ async def process_section(message: types.Message, state: FSMContext) -> None:
     sections = project.get("sections", [])
 
     if text == "/skip":
-        if editing_idx is not None:
-            sections[editing_idx]["done"] = True
-            save(message.from_user.id, project)
-            await state.update_data(editing_section=None)
-            await message.answer(f"✅ Раздел пропущен.\n\n{_section_list(sections)}\n\nВыбери следующий раздел или /generate")
         return
 
-    section = None
-    for s in sections:
-        s_clean = s["number"].strip().lower().split()[0].rstrip(".")
-        if s_clean == text.lower().strip().rstrip("."):
-            section = s
-            break
+    numbers = _extract_numbers(text)
+    matched = _find_sections(sections, numbers)
 
-    if not section:
+    if not matched:
         await message.answer(
             f"Раздел «{text}» не найден.\n\n"
             f"{_section_list(sections)}\n\n"
@@ -255,14 +247,11 @@ async def process_section(message: types.Message, state: FSMContext) -> None:
         )
         return
 
-    if section.get("done"):
-        await message.answer(
-            f"⚠️ Раздел «{section['number'].strip()}» уже заполнен.\n"
-            f"Напиши его номер ещё раз, чтобы перезаписать."
-        )
+    section = matched[0]
+    remaining = [m[0] for m in matched[1:]]
 
     idx = sections.index(section)
-    await state.update_data(editing_section=idx)
+    await state.update_data(editing_section=idx, section_queue=remaining)
 
     section_num = section["number"].strip()
     section_title = section_num.split(". ", 1)[1] if ". " in section_num else section_num
@@ -272,6 +261,8 @@ async def process_section(message: types.Message, state: FSMContext) -> None:
         prompt = await generate_section_prompt(project["topic"], section_num, section_title)
         content = await ask(prompt)
 
+        queue_hint = f"\n\n<i>Очередь: {', '.join(s['number'].strip() for s in matched[1:4])}</i>" if remaining else ""
+
         await wait.edit_text(
             f"📝 <b>Раздел {md_to_html(section_num)}</b>\n\n"
             f"Проект содержания:\n\n"
@@ -280,7 +271,8 @@ async def process_section(message: types.Message, state: FSMContext) -> None:
             f"Ты можешь:\n"
             f"• прислать <b>свой текст</b> — я сохраню его\n"
             f"• /done — оставить предложенный вариант\n"
-            f"• /skip — пропустить раздел",
+            f"• /skip — пропустить раздел"
+            f"{queue_hint}",
         )
         await state.update_data(generated_content=content)
     except Exception:
@@ -301,26 +293,87 @@ async def _save_section_content(
 
     if text in ("/done", "/skip"):
         project["sections"][idx]["content"] = text if text != "/skip" else "Пропущено"
-        project["sections"][idx]["done"] = True
-        save(message.from_user.id, project)
-        await state.update_data(editing_section=None, generated_content=None)
-        await message.answer(
-            f"✅ Раздел сохранён.\n\n"
-            f"{_section_list(project['sections'])}\n\n"
-            f"Выбери следующий раздел или /generate"
-        )
-        return
+    else:
+        if len(text) < 10:
+            await message.answer("Слишком короткий текст. Напиши подробнее или /done чтобы оставить предложенный.")
+            return
+        project["sections"][idx]["content"] = text
 
-    if len(text) < 10:
-        await message.answer("Слишком короткий текст. Напиши подробнее или /done чтобы оставить предложенный.")
-        return
-
-    project["sections"][idx]["content"] = text
     project["sections"][idx]["done"] = True
     save(message.from_user.id, project)
     await state.update_data(editing_section=None, generated_content=None)
+
+    data = await state.get_data()
+    queue = data.get("section_queue", [])
+
+    if queue:
+        next_num = queue.pop(0)
+        await state.update_data(section_queue=queue)
+
+        sections = project.get("sections", [])
+        for s in sections:
+            s_clean = s["number"].strip().lower().split()[0].rstrip(".")
+            if s_clean == next_num:
+                next_idx = sections.index(s)
+                await state.update_data(editing_section=next_idx)
+                section_num = s["number"].strip()
+                section_title = section_num.split(". ", 1)[1] if ". " in section_num else section_num
+                wait = await message.answer(f"⏳ Генерирую содержание для раздела {section_num}...")
+                try:
+                    prompt = await generate_section_prompt(project["topic"], section_num, section_title)
+                    content = await ask(prompt)
+                    queue_names = []
+                    for _q in queue:
+                        for _s in sections:
+                            if _s["number"].strip().lower().split()[0].rstrip(".") == _q:
+                                queue_names.append(_s["number"].strip())
+                                break
+                    queue_hint = f"\n\n<i>Очередь: {', '.join(queue_names[:3])}</i>" if queue_names else ""
+                    await wait.edit_text(
+                        f"📝 <b>Раздел {md_to_html(section_num)}</b>\n\n"
+                        f"Проект содержания:\n\n"
+                        f"{md_to_html(content)}\n\n"
+                        f"───\n"
+                        f"Ты можешь:\n"
+                        f"• прислать <b>свой текст</b> — я сохраню его\n"
+                        f"• /done — оставить предложенный вариант\n"
+                        f"• /skip — пропустить раздел"
+                        f"{queue_hint}",
+                    )
+                    await state.update_data(generated_content=content)
+                except Exception:
+                    logger.exception("Section generation failed")
+                    await wait.edit_text("❌ Ошибка при генерации раздела. Попробуй другой.")
+                return
+
     await message.answer(
-        f"✅ Раздел сохранён (твой вариант).\n\n"
+        f"✅ Раздел сохранён.\n\n"
         f"{_section_list(project['sections'])}\n\n"
         f"Выбери следующий раздел или /generate"
     )
+
+
+def _extract_numbers(text: str) -> list[str]:
+    """Извлекает номера разделов из текста вида '1.2 и 2.2' или '1.2, 2.2'."""
+    text = text.replace("и", ",").replace(",", " ").replace(". ", " ")
+    parts = text.split()
+    numbers = []
+    for p in parts:
+        p = p.strip().rstrip(".")
+        if re.match(r"^\d+(\.\d+)*$", p):
+            numbers.append(p)
+    return numbers
+
+
+def _find_sections(sections: list[dict], numbers: list[str]) -> list[dict]:
+    """Ищет разделы по номерам в указанном порядке."""
+    matched = []
+    seen = set()
+    for num in numbers:
+        for s in sections:
+            s_clean = s["number"].strip().lower().split()[0].rstrip(".")
+            if s_clean == num and id(s) not in seen:
+                matched.append(s)
+                seen.add(id(s))
+                break
+    return matched
