@@ -39,35 +39,66 @@ def _section_list(sections: list[dict]) -> str:
     return "\n".join(lines)
 
 
+TOPICS = [
+    "Проект 5-этажного жилого дома",
+    "Проект 2-этажного коттеджа",
+    "Проект административного здания",
+    "Проект торгового центра",
+    "Проект спортивного комплекса",
+    "Проект детского сада",
+    "Проект школы",
+    "Проект производственного цеха",
+    "Проект складского комплекса",
+    "Проект автовокзала",
+    "Реконструкция жилого дома",
+    "Реконструкция административного здания",
+    "Свой вариант (введу сам)",
+]
+
+
 @router.message(Command("coursework"))
 async def cmd_coursework(message: types.Message, state: FSMContext) -> None:
     delete(message.from_user.id)
     await state.clear()
+
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[])
+    for i, t in enumerate(TOPICS, 1):
+        kb.inline_keyboard.append([types.InlineKeyboardButton(text=t, callback_data=f"cw_topic_{i}")])
+
     await message.answer(
         "📚 <b>Конструктор курсового проекта</b>\n\n"
-        "Я помогу тебе собрать пояснительную записку пошагово.\n\n"
-        "Напиши <b>тему</b> курсового проекта.\n\n"
-        "Пример: «Проект 5-этажного жилого дома в г. Краснодар»"
+        "Выбери тему из списка или напиши свою:",
+        reply_markup=kb,
     )
     await state.set_state(Coursework.topic)
 
 
-@router.message(Coursework.topic)
-async def process_topic(message: types.Message, state: FSMContext) -> None:
-    topic = message.text.strip()
-    if len(topic) < 5:
-        await message.answer("Слишком короткая тема. Напиши подробнее.")
+@router.callback_query(F.data.startswith("cw_topic_"))
+async def pick_topic(callback: types.CallbackQuery, state: FSMContext) -> None:
+    idx = int(callback.data.replace("cw_topic_", "")) - 1
+    topic = TOPICS[idx] if 0 <= idx < len(TOPICS) else ""
+
+    if topic == "Свой вариант (введу сам)":
+        await callback.message.edit_text("Напиши свою тему курсового проекта:")
+        await callback.answer()
         return
 
-    wait = await message.answer("⏳ Генерирую структуру проекта...")
+    await callback.answer()
+    await state.update_data(selected_topic=topic)
+    await _start_coursework(callback.message, state, topic, user_id=callback.from_user.id)
+
+
+async def _start_coursework(msg: types.Message, state: FSMContext, topic: str, user_id: int | None = None) -> None:
+    uid = user_id or msg.from_user.id
+    wait = await msg.answer(f"⏳ Генерирую структуру для «{topic}»...")
     try:
         structure_text = await generate_structure(topic)
         sections = parse_structure(structure_text)
 
-        project = new_project(message.from_user.id, topic)
+        project = new_project(uid, topic)
         project["structure"] = structure_text
         project["sections"] = sections
-        save(message.from_user.id, project)
+        save(uid, project)
 
         await wait.edit_text(
             f"✅ <b>Структура сгенерирована</b>\n\n"
@@ -81,10 +112,19 @@ async def process_topic(message: types.Message, state: FSMContext) -> None:
         )
     except Exception:
         logger.exception("Structure generation failed")
-        await wait.edit_text("❌ Ошибка при генерации структуры. Попробуй ещё раз.")
+        await wait.edit_text("❌ Ошибка. Попробуй ещё раз.")
         return
 
     await state.set_state(Coursework.fill_section)
+
+
+@router.message(Coursework.topic)
+async def process_topic(message: types.Message, state: FSMContext) -> None:
+    topic = message.text.strip()
+    if len(topic) < 5:
+        await message.answer("Слишком короткая тема. Напиши подробнее.")
+        return
+    await _start_coursework(message, state, topic)
 
 
 @router.message(Coursework.fill_section, Command("generate"))
