@@ -113,6 +113,7 @@ async def _start_coursework(msg: types.Message, state: FSMContext, topic: str, u
     except Exception:
         logger.exception("Structure generation failed")
         await wait.edit_text("❌ Ошибка. Попробуй ещё раз.")
+        await state.clear()
         return
 
     await state.set_state(Coursework.fill_section)
