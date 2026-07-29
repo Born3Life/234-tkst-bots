@@ -354,6 +354,17 @@ async def handle_word(message: types.Message) -> None:
         await wait_msg.edit_text("Ошибка.")
 
 
+@router.message(Command("myid"))
+async def handle_myid(message: types.Message) -> None:
+    uid = message.from_user.id
+    admin_status = is_admin(uid)
+    await message.answer(
+        f"Твой Telegram ID: <code>{uid}</code>\n"
+        f"Админ: {'✅ да' if admin_status else '❌ нет'}\n"
+        f"ADMIN_IDS в коде: {ADMIN_IDS}"
+    )
+
+
 # --- Подписки (должны быть ДО generic handle_message) ---
 
 @router.message(Command("buy"))
@@ -430,7 +441,9 @@ async def handle_successful_payment(message: types.Message) -> None:
 
 @router.message(Command("grant"))
 async def handle_grant(message: types.Message) -> None:
-    if not is_admin(message.from_user.id):
+    uid = message.from_user.id
+    logger.info("[/grant] user_id=%s, is_admin=%s, ADMIN_IDS=%s", uid, is_admin(uid), ADMIN_IDS)
+    if not is_admin(uid):
         await message.answer("Команда только для админов.")
         return
 
