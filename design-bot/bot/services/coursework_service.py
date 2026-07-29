@@ -103,13 +103,13 @@ async def generate_section_prompt(topic: str, section_number: str, section_title
     )
 
 
-async def generate_project_docx(user_id: int) -> str:
+async def generate_project_docx(user_id: int, use_sections: list[dict] | None = None) -> str:
     project = load(user_id)
     if not project:
         return ""
 
     sections_text = []
-    for s in project.get("sections", []):
+    for s in (use_sections or project.get("sections", [])):
         if s.get("content"):
             sections_text.append(f"{s['number']}\n{s['content']}")
 

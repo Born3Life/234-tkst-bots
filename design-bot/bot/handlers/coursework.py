@@ -151,18 +151,48 @@ async def cmd_generate(message: types.Message, state: FSMContext) -> None:
         await state.clear()
         return
 
-    empty = [s for s in project.get("sections", []) if not s.get("content")]
-    if empty:
-        await message.answer(
-            f"❌ Заполнены не все разделы.\n"
-            f"Пустые: {', '.join(s['number'].strip() for s in empty[:5])}\n\n"
-            f"Заполни их или напиши /skip чтобы пропустить."
-        )
-        return
+    sections = project.get("sections", [])
+
+    parts = message.text.split(maxsplit=1)
+    args_str = parts[1].strip() if len(parts) > 1 else ""
+    args = [a.strip() for a in args_str.split(",") if a.strip()]
+
+    if args:
+        indices = []
+        for arg in args:
+            found = None
+            for i, s in enumerate(sections):
+                s_clean = s["number"].strip().lower().split()[0].rstrip(".")
+                if s_clean == arg.lower().strip().rstrip("."):
+                    found = i
+                    break
+            if found is None:
+                await message.answer(f"❌ Раздел «{arg}» не найден. Проверь номера.")
+                return
+            indices.append(found)
+
+        empty = [sections[i] for i in indices if not sections[i].get("content")]
+        if empty:
+            await message.answer(
+                f"❌ Раздел(ы) не заполнены:\n"
+                f"{chr(10).join(s['number'].strip() for s in empty[:5])}\n\n"
+                f"Сначала заполни их, потом /generate"
+            )
+            return
+        use_sections = [sections[i] for i in indices]
+    else:
+        use_sections = [s for s in sections if s.get("content")]
+        empty = [s for s in sections if not s.get("content")]
+        if not use_sections:
+            await message.answer(
+                "❌ Нет заполненных разделов.\n"
+                "Заполни хотя бы один, написав его номер."
+            )
+            return
 
     wait = await message.answer("⏳ Собираю пояснительную записку...")
     try:
-        full_text = await generate_project_docx(message.from_user.id)
+        full_text = await generate_project_docx(message.from_user.id, use_sections)
         docx_bytes = create_answer_docx(full_text)
         await message.answer_document(
             types.BufferedInputFile(docx_bytes.read(), filename="coursework.docx"),
