@@ -22,6 +22,123 @@ SUPPORTED_DOCS = {"pdf", "docx"}
 MAX_PAGES = 30
 MAX_TEXT_LEN = 4000
 
+BATCH_TIMEOUT = 1.5
+_batch: dict[tuple[int, int], list[types.Message]] = {}
+_batch_tasks: dict[tuple[int, int], asyncio.Task] = {}
+
+
+def _batch_key(message: types.Message) -> tuple[int, int]:
+    return (message.chat.id, message.from_user.id)
+
+
+async def _run_batch(bot: Bot, messages: list[types.Message]) -> None:
+    await asyncio.sleep(BATCH_TIMEOUT)
+    msg = messages[0]
+    key = _batch_key(msg)
+    _batch.pop(key, None)
+    _batch_tasks.pop(key, None)
+
+    allowed, reason = can_access(msg.from_user.id, BOT_KEY)
+    if not allowed:
+        await msg.answer(reason)
+        return
+    increment_daily_count(msg.from_user.id)
+
+    if len(messages) == 1:
+        m = messages[0]
+        if m.text and not m.text.startswith("/"):
+            await _handle_single_text(m)
+        elif m.photo:
+            await _handle_single_photo(m)
+        elif m.document:
+            await _handle_single_document(m)
+        return
+
+    text_parts: list[str] = []
+    photo_count = 0
+    file_descs: list[str] = []
+
+    for m in messages:
+        if m.text and not m.text.startswith("/"):
+            text_parts.append(m.text)
+        elif m.caption:
+            text_parts.append(m.caption)
+        if m.photo:
+            photo_count += 1
+        if m.document and m.document.file_name:
+            file_descs.append(m.document.file_name)
+
+    prompt_parts = []
+    if text_parts:
+        prompt_parts.append("Вопросы:\n" + "\n".join(text_parts))
+    if file_descs:
+        prompt_parts.append("Прикреплённые файлы: " + ", ".join(file_descs))
+    if photo_count:
+        prompt_parts.append(f"Фотографий: {photo_count}")
+
+    prompt = "\n".join(prompt_parts)
+    wait = await bot.send_message(msg.chat.id, "Думаю...")
+    try:
+        answer = await ask(prompt)
+        await _send_result(msg, answer, wait, as_docx=False)
+    except Exception:
+        logger.exception("Batch error")
+        await wait.edit_text("Ошибка при обработке.")
+
+
+async def _handle_single_text(message: types.Message) -> None:
+    allowed, reason = can_access(message.from_user.id, BOT_KEY)
+    if not allowed:
+        await message.answer(reason)
+        return
+    increment_daily_count(message.from_user.id)
+
+    text = message.text
+    if text.startswith("/"):
+        return
+
+    want_docx = any(kw in text.lower() for kw in ("ворд", "docx", ".docx", "в формате word", "документом"))
+
+    wait = await message.answer("Думаю...")
+    try:
+        answer = await ask(text)
+        await _send_result(message, answer, wait, as_docx=want_docx)
+    except Exception:
+        logger.exception("Error")
+        await wait.edit_text("Ошибка.")
+
+
+async def _handle_single_photo(message: types.Message) -> None:
+    allowed, reason = can_access(message.from_user.id, BOT_KEY)
+    if not allowed:
+        await message.answer(reason)
+        return
+    increment_daily_count(message.from_user.id)
+
+    photo = message.photo[-1]
+    caption = message.caption or "Что изображено на этом чертеже или схеме? Проанализируй подробно."
+
+    wait = await message.answer("Думаю...")
+    try:
+        file = await message.bot.get_file(photo.file_id)
+        file_bytes = await message.bot.download_file(file.file_path)
+        b64 = b64encode(file_bytes.read()).decode()
+        answer = await ask(caption, image_base64=b64)
+        await _send_result(message, answer, wait, as_docx=False)
+    except Exception:
+        logger.exception("Error")
+        await wait.edit_text("Ошибка.")
+
+
+async def _handle_single_document(message: types.Message) -> None:
+    allowed, reason = can_access(message.from_user.id, BOT_KEY)
+    if not allowed:
+        await message.answer(reason)
+        return
+    increment_daily_count(message.from_user.id)
+
+    await _process_document(message, message.document, message.caption or "", as_docx=True)
+
 
 def is_group(message: types.Message) -> bool:
     return message.chat.type in ("group", "supergroup")
@@ -342,59 +459,21 @@ async def handle_ask(message: types.Message) -> None:
         await wait_msg.edit_text("❌ Ошибка. Попробуй ещё раз.")
 
 
-@router.message(lambda msg: msg.document is not None)
-async def handle_document(message: types.Message) -> None:
-    if is_group(message) and not mentioned(message):
-        return
-    allowed, reason = can_access(message.from_user.id, BOT_KEY)
-    if not allowed:
-        await message.answer(reason)
-        return
-    increment_daily_count(message.from_user.id)
-    await _process_document(message, message.document, message.caption or "", as_docx=True)
-
-
 @router.message()
 async def handle_message(message: types.Message) -> None:
     if is_group(message) and not mentioned(message):
         return
 
-    allowed, reason = can_access(message.from_user.id, BOT_KEY)
-    if not allowed:
-        await message.answer(reason)
+    if message.text and message.text.startswith("/"):
         return
-    increment_daily_count(message.from_user.id)
 
-    if message.text:
-        text = message.text
-        if text.startswith("/"):
-            return
+    key = _batch_key(message)
 
-        if message.caption:
-            text = message.caption
+    if key in _batch_tasks:
+        _batch_tasks[key].cancel()
 
-        want_docx = any(kw in text.lower() for kw in ("ворд", "docx", ".docx", "в формате word", "документом"))
+    if key not in _batch:
+        _batch[key] = []
+    _batch[key].append(message)
 
-        wait_msg = await message.answer("⏳ Думаю...")
-        try:
-            answer = await ask(text)
-            await _send_result(message, answer, wait_msg, as_docx=want_docx)
-        except Exception:
-            logger.exception("Error processing text")
-            await wait_msg.edit_text("❌ Ошибка. Попробуй ещё раз.")
-
-    elif message.photo:
-        photo = message.photo[-1]
-        caption = message.caption or "Что изображено на этом чертеже или схеме? Проанализируй подробно."
-
-        wait_msg = await message.answer("⏳ Анализирую изображение...")
-        try:
-            file = await message.bot.get_file(photo.file_id)
-            file_bytes = await message.bot.download_file(file.file_path)
-            b64 = b64encode(file_bytes.read()).decode()
-
-            answer = await ask(caption, image_base64=b64)
-            await _send_result(message, answer, wait_msg, as_docx=False)
-        except Exception:
-            logger.exception("Error processing photo")
-            await wait_msg.edit_text("❌ Ошибка при обработке изображения. Попробуй ещё раз.")
+    _batch_tasks[key] = asyncio.create_task(_run_batch(message.bot, _batch[key]))

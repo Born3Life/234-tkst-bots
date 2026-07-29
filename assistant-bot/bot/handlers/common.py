@@ -38,8 +38,181 @@ router = Router()
 SUPPORTED_DOCS = {"pdf", "docx"}
 MAX_PAGES = 30
 MAX_TEXT_LEN = 4000
+BATCH_TIMEOUT = 1.5
 
 _reminder_tasks: dict[int, asyncio.Task] = {}
+_batch: dict[tuple[int, int], list[types.Message]] = {}
+_batch_tasks: dict[tuple[int, int], asyncio.Task] = {}
+
+
+def _batch_key(message: types.Message) -> tuple[int, int]:
+    return (message.chat.id, message.from_user.id)
+
+
+async def _run_batch(bot: Bot, messages: list[types.Message]) -> None:
+    try:
+        await asyncio.sleep(BATCH_TIMEOUT)
+    except asyncio.CancelledError:
+        return
+    if not messages:
+        return
+    msg = messages[0]
+    key = _batch_key(msg)
+    _batch.pop(key, None)
+    _batch_tasks.pop(key, None)
+
+    if len(messages) == 1:
+        m = messages[0]
+        if m.text and not m.text.startswith("/"):
+            await _handle_single_text(m)
+        elif m.photo:
+            await _handle_single_photo(m)
+        elif m.document:
+            await _handle_single_document(m)
+        return
+
+    text_parts: list[str] = []
+    photo_count = 0
+    file_descs: list[str] = []
+
+    for m in messages:
+        if m.text and not m.text.startswith("/"):
+            text_parts.append(m.text)
+        elif m.caption:
+            text_parts.append(m.caption)
+        if m.photo:
+            photo_count += 1
+        if m.document and m.document.file_name:
+            file_descs.append(m.document.file_name)
+
+    prompt_parts = []
+    if text_parts:
+        prompt_parts.append("Вопросы:\n" + "\n".join(text_parts))
+    if file_descs:
+        prompt_parts.append("Прикреплённые файлы: " + ", ".join(file_descs))
+    if photo_count:
+        prompt_parts.append(f"Фотографий: {photo_count}")
+
+    prompt = "\n".join(prompt_parts)
+    wait = await bot.send_message(msg.chat.id, "Думаю...")
+    try:
+        answer = await deepseek_ask(prompt)
+        await _send_result(msg, answer, wait)
+    except Exception:
+        logger.exception("Batch error")
+        await wait.edit_text("Ошибка при обработке.")
+
+
+async def _handle_single_text(message: types.Message) -> None:
+    if message.text.startswith("/"):
+        return
+    wait = await message.answer("Думаю...")
+    try:
+        user_text = message.text
+        context = memory_mgr.get_context(message.chat.id)
+        memory_mgr.add_entry(message.chat.id, "user", user_text)
+
+        today = schedule_mgr.get_today_schedule_text(message.chat.id)
+        if "расписание" in user_text.lower() or "пары" in user_text.lower():
+            answer = today
+            if "помен" in user_text.lower() or "измен" in user_text.lower() or "исправ" in user_text.lower():
+                if await is_group_admin(message.bot, message.chat.id, message.from_user.id):
+                    answer = "Напиши /addlesson чтобы добавить пару или /setschedule чтобы загрузить новое расписание."
+                else:
+                    answer = "Изменить расписание может только админ группы."
+        else:
+            answer = await deepseek_ask(user_text, memory_context=context)
+
+        memory_mgr.add_entry(message.chat.id, "assistant", answer)
+        await _send_result(message, answer, wait)
+    except Exception:
+        logger.exception("Error")
+        await wait.edit_text("Ошибка.")
+
+
+async def _handle_single_photo(message: types.Message) -> None:
+    wait = await message.answer("Думаю...")
+    try:
+        photo = message.photo[-1]
+        caption = message.caption or ""
+        file = await message.bot.get_file(photo.file_id)
+        raw = await message.bot.download_file(file.file_path)
+        b64 = b64encode(raw.read()).decode()
+
+        memory_mgr.add_entry(message.chat.id, "user", f"[Фото] {caption}")
+
+        if "расписание" in caption.lower():
+            result = await deepseek_ask(
+                "Извлеки расписание с этого изображения. Формат: день_недели, время, предмет, аудитория",
+                image_base64=b64,
+            )
+            if result:
+                schedule_mgr.set_schedule_from_text(message.chat.id, result)
+                answer = f"Расписание сохранено:\n\n{schedule_mgr.get_today_schedule_text(message.chat.id)}"
+                await start_reminder(message.bot, message.chat.id)
+            else:
+                answer = "Не удалось распознать расписание."
+        else:
+            context = memory_mgr.get_context(message.chat.id)
+            answer = await deepseek_ask(caption or "Что на этом изображении?", image_base64=b64, memory_context=context)
+
+        memory_mgr.add_entry(message.chat.id, "assistant", answer)
+        await _send_result(message, answer, wait)
+    except Exception:
+        logger.exception("Error")
+        await wait.edit_text("Ошибка.")
+
+
+async def _handle_single_document(message: types.Message) -> None:
+    ext = message.document.file_name.rsplit(".", 1)[-1].lower() if message.document.file_name else ""
+    if ext not in SUPPORTED_DOCS:
+        await message.answer("Поддерживаю только PDF и DOCX.")
+        return
+
+    wait = await message.answer("Думаю...")
+    try:
+        file = await message.bot.get_file(message.document.file_id)
+        raw = await message.bot.download_file(file.file_path)
+        file_bytes = raw.read()
+        caption = message.caption or ""
+
+        memory_mgr.add_entry(message.chat.id, "user", f"[Файл {message.document.file_name}] {caption}")
+
+        if "расписание" in caption.lower():
+            if ext == "pdf" and is_scanned_pdf(file_bytes):
+                pages = pdf_pages_as_base64(file_bytes, max_pages=5)
+                result = ""
+                for b64 in pages:
+                    part = await deepseek_ask("Извлеки расписание с этого изображения. Формат: день_недели, время, предмет", image_base64=b64)
+                    result += part + "\n"
+            else:
+                text = extract_text(file_bytes, ext)
+                result = await deepseek_ask(f"Извлеки расписание из текста. Формат:\nдень_недели\nвремя, предмет, аудитория\n\n{text}")
+
+            if result:
+                schedule_mgr.set_schedule_from_text(message.chat.id, result)
+                answer = f"Расписание сохранено:\n\n{schedule_mgr.get_today_schedule_text(message.chat.id)}"
+                await start_reminder(message.bot, message.chat.id)
+            else:
+                answer = "Не удалось распознать расписание."
+        else:
+            if ext == "pdf" and is_scanned_pdf(file_bytes):
+                pages = pdf_pages_as_base64(file_bytes, max_pages=3)
+                result = ""
+                for b64 in pages:
+                    part = await deepseek_ask("Прочитай текст с этого изображения", image_base64=b64)
+                    result += part + "\n"
+            else:
+                text = extract_text(file_bytes, ext)
+                context = memory_mgr.get_context(message.chat.id)
+                result = await deepseek_ask(f"Проанализируй документ:\n\n{text}", memory_context=context)
+            answer = result
+
+        memory_mgr.add_entry(message.chat.id, "assistant", answer)
+        await _send_result(message, answer, wait)
+    except Exception:
+        logger.exception("Error")
+        await wait.edit_text("Ошибка.")
 
 
 def is_group(message: types.Message) -> bool:
@@ -526,111 +699,23 @@ async def handle_revoke(message: types.Message) -> None:
     await message.answer(f"Подписка {identifier} отозвана.")
 
 
-# --- Generic handler (catch-all) ---
+# --- Generic handler (catch-all with batching) ---
 
 @router.message()
 async def handle_message(message: types.Message) -> None:
     if message.text and message.text.startswith("/"):
         return
 
-    wait_msg = await message.answer("Думаю...")
-    try:
-        if message.text:
-            user_text = message.text
+    key = _batch_key(message)
 
-            context = memory_mgr.get_context(message.chat.id)
-            memory_mgr.add_entry(message.chat.id, "user", user_text)
+    if key in _batch_tasks:
+        _batch_tasks[key].cancel()
 
-            today_schedule = schedule_mgr.get_today_schedule_text(message.chat.id)
-            if "расписание" in user_text.lower() or "пары" in user_text.lower():
-                answer = today_schedule
-                if "помен" in user_text.lower() or "измен" in user_text.lower() or "исправ" in user_text.lower():
-                    if await is_group_admin(message.bot, message.chat.id, message.from_user.id):
-                        answer = "Напиши /addlesson чтобы добавить пару или /setschedule чтобы загрузить новое расписание."
-                    else:
-                        answer = "Изменить расписание может только админ группы."
-            else:
-                answer = await deepseek_ask(user_text, memory_context=context)
+    if key not in _batch:
+        _batch[key] = []
+    _batch[key].append(message)
 
-            memory_mgr.add_entry(message.chat.id, "assistant", answer)
-            await _send_result(message, answer, wait_msg)
-
-        elif message.photo:
-            photo = message.photo[-1]
-            caption = message.caption or ""
-            file = await message.bot.get_file(photo.file_id)
-            raw = await message.bot.download_file(file.file_path)
-            b64 = b64encode(raw.read()).decode()
-
-            memory_mgr.add_entry(message.chat.id, "user", f"[Фото] {caption}")
-
-            if "расписание" in caption.lower():
-                result = await deepseek_ask(
-                    "Извлеки расписание с этого изображения. Формат: день_недели, время, предмет, аудитория",
-                    image_base64=b64,
-                )
-                if result:
-                    schedule_mgr.set_schedule_from_text(message.chat.id, result)
-                    answer = f"Расписание сохранено:\n\n{schedule_mgr.get_today_schedule_text(message.chat.id)}"
-                    await start_reminder(message.bot, message.chat.id)
-                else:
-                    answer = "Не удалось распознать расписание."
-            else:
-                context = memory_mgr.get_context(message.chat.id)
-                answer = await deepseek_ask(caption or "Что на этом изображении?", image_base64=b64, memory_context=context)
-
-            memory_mgr.add_entry(message.chat.id, "assistant", answer)
-            await _send_result(message, answer, wait_msg)
-
-        elif message.document:
-            ext = message.document.file_name.rsplit(".", 1)[-1].lower() if message.document.file_name else ""
-            if ext not in SUPPORTED_DOCS:
-                await message.answer("Поддерживаю только PDF и DOCX.")
-                return
-
-            file = await message.bot.get_file(message.document.file_id)
-            raw = await message.bot.download_file(file.file_path)
-            file_bytes = raw.read()
-            caption = message.caption or ""
-
-            memory_mgr.add_entry(message.chat.id, "user", f"[Файл {message.document.file_name}] {caption}")
-
-            if "расписание" in caption.lower():
-                if ext == "pdf" and is_scanned_pdf(file_bytes):
-                    pages = pdf_pages_as_base64(file_bytes, max_pages=5)
-                    result = ""
-                    for b64 in pages:
-                        part = await deepseek_ask("Извлеки расписание с этого изображения. Формат: день_недели, время, предмет", image_base64=b64)
-                        result += part + "\n"
-                else:
-                    text = extract_text(file_bytes, ext)
-                    result = await deepseek_ask(f"Извлеки расписание из текста. Формат:\nдень_недели\nвремя, предмет, аудитория\n\n{text}")
-
-                if result:
-                    schedule_mgr.set_schedule_from_text(message.chat.id, result)
-                    answer = f"Расписание сохранено:\n\n{schedule_mgr.get_today_schedule_text(message.chat.id)}"
-                    await start_reminder(message.bot, message.chat.id)
-                else:
-                    answer = "Не удалось распознать расписание."
-            else:
-                if ext == "pdf" and is_scanned_pdf(file_bytes):
-                    pages = pdf_pages_as_base64(file_bytes, max_pages=3)
-                    result = ""
-                    for b64 in pages:
-                        part = await deepseek_ask("Прочитай текст с этого изображения", image_base64=b64)
-                        result += part + "\n"
-                else:
-                    text = extract_text(file_bytes, ext)
-                    context = memory_mgr.get_context(message.chat.id)
-                    result = await deepseek_ask(f"Проанализируй документ:\n\n{text}", memory_context=context)
-                answer = result
-
-            memory_mgr.add_entry(message.chat.id, "assistant", answer)
-            await _send_result(message, answer, wait_msg)
-
-    except Exception:
-        logger.exception("Error processing message")
-        await wait_msg.edit_text("Ошибка при обработке. Попробуй ещё раз.")
+    _batch_tasks[key] = asyncio.create_task(_run_batch(message.bot, _batch[key]))
 
 
 async def _send_result(message: types.Message, text: str, wait_msg: types.Message) -> None:
