@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import os
 
+import re
+
 import aiohttp
 
 logger = logging.getLogger(__name__)
@@ -276,7 +278,18 @@ async def ask(prompt: str, image_base64: str | None = None) -> str:
             return f"❌ Ошибка модели: {data['error']}"
 
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
-        return content.strip() or "❌ Пустой ответ от модели."
+        return _clean_response(content) or "❌ Пустой ответ от модели."
     except Exception:
         logger.exception("DeepSeek request failed")
         return "❌ Ошибка при запросе к DeepSeek. Баланс закончился?"
+
+
+def _clean_response(text: str) -> str:
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'(?m)^###\s*', '', text)
+    text = re.sub(r'(?m)^(\d+)\.\s+\1\.', r'\1.', text)
+    text = re.sub(r'(?m)^(\d+)\.\t+\d+\.', r'\1.', text)
+    text = re.sub(r'(?m)^\*\s+', '- ', text)
+    text = re.sub(r'(?m)^\s{2,}- ', '- ', text)
+    text = re.sub(r'(?m)^\s{2,}(\d+\.)', r'\1', text)
+    return text.strip()
