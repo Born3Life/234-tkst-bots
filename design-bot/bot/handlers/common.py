@@ -5,9 +5,11 @@ import logging
 from base64 import b64encode
 
 from aiogram import F, Router, types
+from aiogram.enums import ParseMode
 from aiogram.filters import Command
 
 from bot.services.docx_writer import create_answer_docx
+from bot.services.formatter import md_to_html
 from bot.services.file_reader import (
     extract_text,
     is_scanned_pdf,
@@ -393,7 +395,8 @@ async def _send_result(
         )
         await wait_msg.delete()
     else:
-        await wait_msg.edit_text(text)
+        html = md_to_html(text)
+        await wait_msg.edit_text(html, parse_mode=ParseMode.HTML)
 
 
 @router.message(Command("word"))

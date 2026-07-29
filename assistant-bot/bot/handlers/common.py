@@ -7,10 +7,11 @@ from base64 import b64encode
 from datetime import datetime
 
 from aiogram import Bot, F, Router, types
-from aiogram.enums import ChatMemberStatus
+from aiogram.enums import ChatMemberStatus, ParseMode
 from aiogram.filters import Command
 
 from bot.services.context import memory_mgr, schedule_mgr
+from bot.services.formatter import md_to_html
 from bot.services.docx_writer import create_answer_docx
 from bot.services.file_reader import (
     extract_text,
@@ -727,4 +728,5 @@ async def _send_result(message: types.Message, text: str, wait_msg: types.Messag
         )
         await wait_msg.delete()
     else:
-        await wait_msg.edit_text(text)
+        html = md_to_html(text)
+        await wait_msg.edit_text(html, parse_mode=ParseMode.HTML)
