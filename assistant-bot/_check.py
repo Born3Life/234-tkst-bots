@@ -1,8 +1,0 @@
-content = open('bot/handlers/common.py', encoding='utf-8').read()
-print('buy handler decorator:', '@router.message(Command("buy"))' in content)
-print('handle_buy function:', 'async def handle_buy' in content)
-print('Total lines:', len(content.splitlines()))
-print('handle_start:', 'async def handle_start' in content)
-print('handle_buy_callback:', 'async def handle_buy_callback' in content)
-print('pre_checkout:', '@router.pre_checkout_query()' in content)
-print('successful_payment:', 'F.successful_payment' in content)
