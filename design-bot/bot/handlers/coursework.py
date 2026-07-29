@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router, types
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -100,16 +101,35 @@ async def _start_coursework(msg: types.Message, state: FSMContext, topic: str, u
         project["sections"] = sections
         save(uid, project)
 
-        await wait.edit_text(
+        body = (
             f"✅ <b>Структура сгенерирована</b>\n\n"
             f"Тема: <b>{md_to_html(topic)}</b>\n\n"
-            f"{md_to_html(structure_text)}\n\n"
+        )
+        if len(structure_text) > 3000:
+            body += f"{md_to_html(structure_text[:3000])}…\n\n<i>(структура сокращена, полная сохранена)</i>\n\n"
+        else:
+            body += f"{md_to_html(structure_text)}\n\n"
+        body += (
             f"<b>Как заполнять:</b>\n"
             f"1. Напиши <b>номер раздела</b> (например, 1 или 2.1)\n"
             f"2. Я предложу содержание — ты отредактируешь\n"
             f"3. Когда все разделы готовы — /generate\n\n"
-            f"Доступные разделы:\n{_section_list(sections)}",
+            f"Доступные разделы:\n{_section_list(sections)}"
         )
+        try:
+            await wait.edit_text(body)
+        except TelegramBadRequest as e:
+            if "MESSAGE_TOO_LONG" in str(e):
+                body_short = (
+                    f"✅ <b>Структура сгенерирована</b>\n\n"
+                    f"Тема: <b>{md_to_html(topic)}</b>\n\n"
+                    f"{md_to_html(structure_text[:1500])}…\n\n"
+                    f"<b>Доступные разделы:</b>\n{_section_list(sections)}\n\n"
+                    f"Полная структура сохранена. Используй /generate для сборки."
+                )
+                await wait.edit_text(body_short)
+            else:
+                await msg.answer("✅ Структура готова. Используй /generate для сборки.")
     except Exception:
         logger.exception("Structure generation failed")
         await wait.edit_text("❌ Ошибка. Попробуй ещё раз.")
