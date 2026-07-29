@@ -278,28 +278,37 @@ async def handle_removelesson(message: types.Message) -> None:
         await message.answer("Эта команда только для админов группы.")
         return
 
-    parts = message.text.split(maxsplit=2)
-    if len(parts) < 3:
-        await message.answer("Формат: /removelesson день номер\nПример: /removelesson понедельник 1\nНомер можно узнать через /fullschedule")
+    parts = message.text.split(maxsplit=4)
+    if len(parts) < 4:
+        await message.answer(
+            "Формат: /removelesson день время предмет [аудитория]\n"
+            "Пример: /removelesson понедельник 09:00 Математика 301\n"
+            "Тот же формат, что и /addlesson"
+        )
         return
 
     weekday_ru = parts[1]
-    try:
-        index = int(parts[2]) - 1
-    except ValueError:
-        await message.answer("Номер должен быть числом.")
-        return
+    time_str = parts[2]
+    subject = parts[3]
+    room = parts[4] if len(parts) > 4 else ""
 
     weekday = ru_to_weekday(weekday_ru)
     if not weekday:
-        await message.answer(f"Неизвестный день: {weekday_ru}")
+        await message.answer(f"Неизвестный день: {weekday_ru}. Используй: пн, вт, ср, чт, пт, сб, вс")
         return
 
-    if schedule_mgr.remove_lesson(message.chat.id, weekday, index):
-        await message.answer("Пара удалена.")
-        await start_reminder(message.bot, message.chat.id)
-    else:
-        await message.answer("Неверный номер. Используй /fullschedule чтобы увидеть номера пар.")
+    schedule = schedule_mgr.get_schedule(message.chat.id)
+    lessons = schedule.get(weekday, [])
+    for i, lesson in enumerate(lessons):
+        if lesson["time"] == time_str and lesson["subject"] == subject and (not room or lesson.get("room", "") == room):
+            schedule[weekday].pop(i)
+            schedule_mgr.save_schedule(message.chat.id, schedule)
+            await message.answer(f"Удалено: {weekday_ru} {time_str} — {subject}" + (f" ({room})" if room else ""))
+            await start_reminder(message.bot, message.chat.id)
+            return
+
+    await message.answer(f"Не найдена пара: {weekday_ru} {time_str} — {subject}" + (f" ({room})" if room else "") +
+                         "\nИспользуй /fullschedule чтобы увидеть точное расписание и скопируй оттуда строку.")
 
 
 @router.message(Command("setremind"))
