@@ -63,9 +63,13 @@ async def cmd_coursework(message: types.Message, state: FSMContext) -> None:
     delete(message.from_user.id)
     await state.clear()
 
+    exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="cw_exit")],
+    ])
     kb = types.InlineKeyboardMarkup(inline_keyboard=[])
     for i, t in enumerate(TOPICS, 1):
         kb.inline_keyboard.append([types.InlineKeyboardButton(text=t, callback_data=f"cw_topic_{i}")])
+    kb.inline_keyboard.append([types.InlineKeyboardButton(text="🔙 Выйти", callback_data="cw_exit")])
 
     await message.answer(
         "📚 <b>Конструктор курсового проекта</b>\n\n"
@@ -73,6 +77,21 @@ async def cmd_coursework(message: types.Message, state: FSMContext) -> None:
         reply_markup=kb,
     )
     await state.set_state(Coursework.topic)
+
+
+@router.callback_query(F.data == "cw_exit")
+async def on_cw_exit(callback: types.CallbackQuery, state: FSMContext) -> None:
+    delete(callback.from_user.id)
+    await state.clear()
+    await callback.message.edit_text("❌ Конструктор отменён. /coursework — начать заново.")
+    await callback.answer()
+
+
+@router.message(Coursework.topic, Command("start", "help", "cancel", "stop", "menu"))
+async def cmd_exit_cw_topic(message: types.Message, state: FSMContext) -> None:
+    delete(message.from_user.id)
+    await state.clear()
+    await message.answer("❌ Выход. /coursework — конструктор, /help — помощь.")
 
 
 @router.callback_query(F.data.startswith("cw_topic_"))
@@ -122,10 +141,13 @@ async def _start_coursework(msg: types.Message, state: FSMContext, topic: str, u
                 f"Доступные разделы:\n{sections_list}\n\n"
                 f"Напиши номер раздела или /generate для сборки."
             )
+        exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="cw_exit")],
+        ])
         try:
-            await wait.edit_text(body)
+            await wait.edit_text(body, reply_markup=exit_kb)
         except TelegramBadRequest:
-            await msg.answer(body)
+            await msg.answer(body, reply_markup=exit_kb)
     except Exception:
         logger.exception("Structure generation failed")
         await wait.edit_text("❌ Ошибка. Попробуй ещё раз.")
@@ -211,7 +233,13 @@ async def cmd_generate(message: types.Message, state: FSMContext) -> None:
 async def cmd_cancel(message: types.Message, state: FSMContext) -> None:
     delete(message.from_user.id)
     await state.clear()
-    await message.answer("❌ Конструктор отменён.")
+    await message.answer("❌ Конструктор отменён. /coursework — начать заново.")
+
+@router.message(Coursework.fill_section, Command("start", "help", "stop", "menu"))
+async def cmd_exit_cw_fill(message: types.Message, state: FSMContext) -> None:
+    delete(message.from_user.id)
+    await state.clear()
+    await message.answer("❌ Выход. /coursework — конструктор, /help — помощь.")
 
 
 @router.message(Coursework.fill_section)
@@ -263,6 +291,9 @@ async def process_section(message: types.Message, state: FSMContext) -> None:
 
         queue_hint = f"\n\n<i>Очередь: {', '.join(s['number'].strip() for s in matched[1:4])}</i>" if remaining else ""
 
+        exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="cw_exit")],
+        ])
         await wait.edit_text(
             f"📝 <b>Раздел {md_to_html(section_num)}</b>\n\n"
             f"Проект содержания:\n\n"
@@ -273,6 +304,7 @@ async def process_section(message: types.Message, state: FSMContext) -> None:
             f"• /done — оставить предложенный вариант\n"
             f"• /skip — пропустить раздел"
             f"{queue_hint}",
+            reply_markup=exit_kb,
         )
         await state.update_data(generated_content=content)
     except Exception:

@@ -20,14 +20,33 @@ class DrawingCheck(StatesGroup):
     waiting = State()
 
 
+exit_kb_draw = types.InlineKeyboardMarkup(inline_keyboard=[
+    [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="drawing_exit")],
+])
+
+
 @router.message(Command("check"))
 async def cmd_check(message: types.Message, state: FSMContext) -> None:
     await state.set_state(DrawingCheck.waiting)
     await message.answer(
         "📐 <b>Проверка чертежа</b>\n\n"
         "Пришли фото чертежа, схему или PDF с проектной документацией.\n"
-        "Я проверю соответствие ГОСТ, СП, ЕСКД и СПДС."
+        "Я проверю соответствие ГОСТ, СП, ЕСКД и СПДС.",
+        reply_markup=exit_kb_draw,
     )
+
+
+@router.callback_query(F.data == "drawing_exit")
+async def on_drawing_exit(callback: types.CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await callback.message.edit_text("❌ Проверка чертежей отменена. /check — начать заново.")
+    await callback.answer()
+
+
+@router.message(DrawingCheck.waiting, Command("start", "help", "cancel", "stop", "menu"))
+async def cmd_exit_drawing(message: types.Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer("❌ Выход. /check — проверить чертёж, /help — помощь.")
 
 
 @router.message(DrawingCheck.waiting, F.photo)
@@ -59,6 +78,7 @@ async def check_photo(message: types.Message, state: FSMContext) -> None:
 
         await wait.edit_text(
             f"📋 <b>Результат проверки чертежа</b>\n\n{md_to_html(result)}",
+            reply_markup=exit_kb_draw,
         )
     except Exception:
         logger.exception("Drawing check failed")
@@ -96,6 +116,7 @@ async def check_document(message: types.Message, state: FSMContext) -> None:
 
         await wait.edit_text(
             f"📋 <b>Результат проверки PDF</b>\n\n{md_to_html(result)}",
+            reply_markup=exit_kb_draw,
         )
     except Exception:
         logger.exception("Drawing check failed")

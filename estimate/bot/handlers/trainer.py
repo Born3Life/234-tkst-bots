@@ -86,12 +86,20 @@ async def cmd_train(message: types.Message, state: FSMContext) -> None:
     for i, t in enumerate(TOPICS, 1):
         kb.inline_keyboard.append([types.InlineKeyboardButton(text=t, callback_data=f"tr_topic_{i}")])
     kb.inline_keyboard.append([types.InlineKeyboardButton(text="Любая тема", callback_data="tr_topic_0")])
+    kb.inline_keyboard.append([types.InlineKeyboardButton(text="🔙 Выйти", callback_data="train_exit")])
 
     await message.answer(
         "🎯 <b>Сметный тренажёр</b>\n\n"
         "Выбери тему для задания или начни с любой:",
         reply_markup=kb,
     )
+
+
+@router.callback_query(F.data == "train_exit")
+async def on_train_exit(callback: types.CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await callback.message.edit_text("❌ Тренажёр остановлен. /train — начать заново.")
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("tr_topic_"))
@@ -106,9 +114,13 @@ async def pick_topic(callback: types.CallbackQuery, state: FSMContext) -> None:
     try:
         task = await _generate_task(topic)
         await state.update_data(current_task=task)
+        exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="train_exit")],
+        ])
         await wait.edit_text(
             f"📝 <b>Задание</b>\n\n{md_to_html(task)}\n\n"
-            f"───\n<i>Напиши свой ответ. /skip — пропустить, /stop — выйти</i>"
+            f"───\n<i>Напиши свой ответ. /skip — пропустить, /stop — выйти</i>",
+            reply_markup=exit_kb,
         )
         await state.set_state(Trainer.waiting_answer)
     except Exception:
@@ -123,9 +135,12 @@ async def cmd_skip(message: types.Message, state: FSMContext) -> None:
     wait = await message.answer("⏳ Показываю решение...")
     try:
         answer = await _check_answer(task, "Я не знаю, покажи решение")
+        exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="train_exit")],
+        ])
         await wait.edit_text(
-            f"💡 <b>Решение</b>\n\n{md_to_html(answer)}\n\n"
-            f"───\nЕщё задание? /train  |  /stop"
+            f"💡 <b>Решение</b>\n\n{md_to_html(answer)}",
+            reply_markup=exit_kb,
         )
     except Exception:
         logger.exception("Skip failed")
@@ -133,10 +148,10 @@ async def cmd_skip(message: types.Message, state: FSMContext) -> None:
     await state.update_data(current_task="", train_topic=None)
 
 
-@router.message(Trainer.waiting_answer, Command("stop"))
-async def cmd_stop(message: types.Message, state: FSMContext) -> None:
+@router.message(Trainer.waiting_answer, Command("start", "help", "cancel", "stop", "menu"))
+async def cmd_exit_train(message: types.Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("❌ Тренажёр остановлен. /train — начать заново.")
+    await message.answer("❌ Тренажёр: выход. /train — начать заново, /help — помощь.")
 
 
 @router.message(Trainer.waiting_answer)
@@ -152,9 +167,12 @@ async def process_answer(message: types.Message, state: FSMContext) -> None:
     wait = await message.answer("🔄 Проверяю ответ...")
     try:
         result = await _check_answer(task, user_answer)
+        exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="train_exit")],
+        ])
         await wait.edit_text(
-            f"📊 <b>Результат проверки</b>\n\n{md_to_html(result)}\n\n"
-            f"───\nЕщё задание? /train  |  /stop"
+            f"📊 <b>Результат проверки</b>\n\n{md_to_html(result)}",
+            reply_markup=exit_kb,
         )
     except Exception:
         logger.exception("Check failed")

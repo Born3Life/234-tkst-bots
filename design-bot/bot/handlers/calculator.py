@@ -55,19 +55,30 @@ async def pick_calc(callback: types.CallbackQuery, state: FSMContext) -> None:
     title, desc = CALC_TYPES[idx]
     await callback.answer()
 
+    exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="calc_exit")],
+    ])
     await state.update_data(calc_title=title, calc_desc=desc)
     await callback.message.edit_text(
         f"🧮 <b>{title}</b>\n\n"
         f"{desc}\n\n"
-        f"Введи исходные данные (числа, размеры, материалы):"
+        f"Введи исходные данные (числа, размеры, материалы):",
+        reply_markup=exit_kb,
     )
     await state.set_state(Calc.waiting_params)
 
 
-@router.message(Calc.waiting_params, Command("stop"))
-async def cmd_stop_calc(message: types.Message, state: FSMContext) -> None:
+@router.callback_query(F.data == "calc_exit")
+async def on_calc_exit(callback: types.CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("❌ Калькулятор остановлен. /calc — начать заново.")
+    await callback.message.edit_text("❌ Выход из калькулятора. /calc — начать заново.")
+    await callback.answer()
+
+
+@router.message(Calc.waiting_params, Command("start", "help", "cancel", "stop", "menu"))
+async def cmd_exit_calc(message: types.Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer("❌ Калькулятор: выход. /calc — начать заново, /help — помощь.")
 
 
 @router.message(Calc.waiting_params)
@@ -92,9 +103,12 @@ async def process_calc(message: types.Message, state: FSMContext) -> None:
         )
         result = await ask(prompt)
 
+        exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="calc_exit")],
+        ])
         await wait.edit_text(
-            f"📐 <b>Расчёт: {title}</b>\n\n{md_to_html(result)}\n\n"
-            f"───\n/calc — другой расчёт  |  /stop"
+            f"📐 <b>Расчёт: {title}</b>\n\n{md_to_html(result)}",
+            reply_markup=exit_kb,
         )
     except Exception:
         logger.exception("Calc failed")

@@ -103,12 +103,20 @@ async def cmd_exam(message: types.Message, state: FSMContext) -> None:
     for i, t in enumerate(TOPICS, 1):
         kb.inline_keyboard.append([types.InlineKeyboardButton(text=t, callback_data=f"exam_topic_{i}")])
     kb.inline_keyboard.append([types.InlineKeyboardButton(text="Любая тема", callback_data="exam_topic_0")])
+    kb.inline_keyboard.append([types.InlineKeyboardButton(text="🔙 Выйти", callback_data="exam_exit")])
 
     await message.answer(
         "🎓 <b>Экзаменатор</b>\n\n"
         "Выбери тему билета:",
         reply_markup=kb,
     )
+
+
+@router.callback_query(F.data == "exam_exit")
+async def on_exam_exit(callback: types.CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await callback.message.edit_text("❌ Экзамен прекращён. /exam — начать заново.")
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("exam_topic_"))
@@ -123,11 +131,15 @@ async def pick_exam_topic(callback: types.CallbackQuery, state: FSMContext) -> N
         await state.update_data(ticket=ticket, current_q=0)
 
         q_text = ticket["questions"][0]
+        exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="exam_exit")],
+        ])
         await wait.edit_text(
             f"🎓 <b>Билет: {ticket['topic']}</b>\n\n"
             f"<b>Вопрос 1 из {len(ticket['questions'])}</b>\n\n"
             f"{q_text}\n\n"
-            f"───\n<i>Напиши ответ. /skip — пропустить, /stop — выйти</i>"
+            f"───\n<i>Напиши ответ. /skip — пропустить, /stop — выйти</i>",
+            reply_markup=exit_kb,
         )
         await state.set_state(Exam.answering)
     except Exception:
@@ -135,10 +147,10 @@ async def pick_exam_topic(callback: types.CallbackQuery, state: FSMContext) -> N
         await wait.edit_text("❌ Ошибка. Попробуй ещё раз /exam")
 
 
-@router.message(Exam.answering, Command("stop"))
-async def cmd_stop_exam(message: types.Message, state: FSMContext) -> None:
+@router.message(Exam.answering, Command("start", "help", "cancel", "stop", "menu"))
+async def cmd_exit_exam(message: types.Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("❌ Экзамен прерван. /exam — начать заново.")
+    await message.answer("❌ Экзамен: выход. /exam — начать заново, /help — помощь.")
 
 
 @router.message(Exam.answering, Command("skip"))
@@ -157,10 +169,14 @@ async def cmd_skip_exam(message: types.Message, state: FSMContext) -> None:
         return
 
     await state.update_data(ticket=ticket, current_q=q_idx)
+    exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="exam_exit")],
+    ])
     await message.answer(
         f"<b>Вопрос {q_idx + 1} из {len(questions)}</b>\n\n"
         f"{questions[q_idx]}\n\n"
-        f"───\n<i>Напиши ответ. /skip — пропустить, /stop — выйти</i>"
+        f"───\n<i>Напиши ответ. /skip — пропустить, /stop — выйти</i>",
+        reply_markup=exit_kb,
     )
 
 
@@ -187,12 +203,16 @@ async def process_exam_answer(message: types.Message, state: FSMContext) -> None
             return
 
         await state.update_data(ticket=ticket, current_q=q_idx)
+        exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="exam_exit")],
+        ])
         await wait.edit_text(
             f"📊 <b>Результат вопроса {q_idx}</b>\n\n{md_to_html(check)}\n\n"
             f"───\n"
             f"<b>Вопрос {q_idx + 1} из {len(questions)}</b>\n\n"
             f"{questions[q_idx]}\n\n"
-            f"───\n<i>Напиши ответ. /skip — пропустить, /stop — выйти</i>"
+            f"───\n<i>Напиши ответ. /skip — пропустить, /stop — выйти</i>",
+            reply_markup=exit_kb,
         )
     except Exception:
         logger.exception("Exam check failed")
@@ -228,6 +248,9 @@ async def _finish_exam(message: types.Message, state: FSMContext, ticket: dict) 
         if ans and ans != "(пропущен)":
             lines.append(f"   Ответ: {ans[:100]}{'…' if len(ans) > 100 else ''}")
 
+    exit_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="🔙 Выйти", callback_data="exam_exit")],
+    ])
     result_msg = "\n".join(lines)
-    await message.answer(result_msg)
+    await message.answer(result_msg, reply_markup=exit_kb)
     await state.clear()
