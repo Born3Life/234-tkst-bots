@@ -300,6 +300,7 @@ async def handle_start(message: types.Message) -> None:
         "/setremind — (админ) установить время напоминания\n"
         "/clearmemory — очистить историю диалогов\n"
         "/buy — 💎 купить подписку на ботов\n"
+        "/gost (тема) — нормативные документы по теме\n"
         "/menu — другие боты группы"
     )
     await message.answer(text)
@@ -320,6 +321,7 @@ async def handle_help(message: types.Message) -> None:
         "  Пример: /setremind 07:45\n"
         "/clearmemory — очистить историю\n"
         "/buy — 💎 подписка на ботов (100⭐ / 30 дн)\n"
+        "/gost (тема) — нормативные документы по теме\n"
         "/menu — другие боты"
     )
     await message.answer(text)
