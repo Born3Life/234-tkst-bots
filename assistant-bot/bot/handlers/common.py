@@ -55,6 +55,9 @@ async def _run_batch(bot: Bot, messages: list[types.Message]) -> None:
         await asyncio.sleep(BATCH_TIMEOUT)
     except asyncio.CancelledError:
         return
+    except Exception:
+        logger.exception("Batch sleep error")
+        return
     if not messages:
         return
     msg = messages[0]

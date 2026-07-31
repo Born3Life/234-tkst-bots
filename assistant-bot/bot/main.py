@@ -94,7 +94,14 @@ async def main() -> None:
 
     from bot.handlers.common import restore_reminders
 
-    await bot.delete_webhook(drop_pending_updates=True)
+    for attempt in range(3):
+        wh = await bot.get_webhook_info()
+        logger.info("Webhook check (%d): url=%s, pending=%s", attempt + 1, wh.url, wh.pending_update_count)
+        if not wh.url:
+            break
+        await bot.delete_webhook(drop_pending_updates=True)
+        await asyncio.sleep(1.0)
+
     logger.info("assistant-bot started")
 
     await restore_reminders(bot, schedule_mgr)
