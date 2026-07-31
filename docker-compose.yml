@@ -1,6 +1,16 @@
 name: tkst-bots
 
 services:
+  warp:
+    image: caomingjun/warp
+    restart: unless-stopped
+    environment:
+      - WARP_SLEEP=2
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+
   assistant:
     build:
       context: ./assistant-bot
