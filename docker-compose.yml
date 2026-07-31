@@ -1,0 +1,46 @@
+name: tkst-bots
+
+services:
+  assistant:
+    build:
+      context: ./assistant-bot
+    env_file: ./assistant-bot/.env
+    ports:
+      - "8081:8080"
+    restart: unless-stopped
+
+  design:
+    build:
+      context: .
+      dockerfile: design-bot/Dockerfile
+    env_file: ./design-bot/.env
+    ports:
+      - "8082:8080"
+    restart: unless-stopped
+
+  estimate:
+    build:
+      context: .
+      dockerfile: estimate/Dockerfile
+    env_file: ./estimate/.env
+    ports:
+      - "8083:8080"
+    restart: unless-stopped
+
+  accounting:
+    build:
+      context: .
+      dockerfile: accounting-and-control/Dockerfile
+    env_file: ./accounting-and-control/.env
+    ports:
+      - "8084:8080"
+    restart: unless-stopped
+
+  smr:
+    build:
+      context: .
+      dockerfile: SMR/Dockerfile
+    env_file: ./SMR/.env
+    ports:
+      - "8085:8080"
+    restart: unless-stopped
